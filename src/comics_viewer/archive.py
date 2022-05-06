@@ -1,4 +1,3 @@
-from typing import Tuple
 from pathlib import Path
 from zipfile import ZipFile
 from rarfile import RarFile
@@ -33,15 +32,27 @@ def list_archive(path: Path):
 
 class Archive:
     def __init__(self, path: Path):
-        self._pages = list_archive(path)
+        def helper():
+            with archive(path) as a:
+                for info in a.infolist():
+                    if Path(info.filename).suffix.lower() in IMAGE_TYPES:
+                        yield info.filename, info.file_size
         self._path = path
+        self._pages = sorted(list(helper()))
+
+    @property
+    def path(self) -> Path:
+        return self._path
 
     def __len__(self):
         return len(self._pages)
 
-    def read(self, idx: int) -> Tuple[str, bytes]:
+    def read(self, idx: int) -> bytes:
         with archive(self._path) as a:
-            return (
-                Path(self._pages[idx]).name,
-                a.read(self._pages[idx])
-            )
+            return a.read(self._pages[idx][0])
+
+    def name(self, idx: int) -> str:
+        return Path(self._pages[idx][0]).name
+
+    def size(self, idx: int) -> int:
+        return self._pages[idx][1]

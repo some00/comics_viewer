@@ -30,7 +30,7 @@ class CoverCache:
                 self._in_mem.store(k, in_mem)
                 return imdecode(in_mem)
         else:
-            name, page = Archive(library / comics).read(idx)
+            page = Archive(library / comics).read(idx)
             thumb = scale_to_fit(self._max_shape, imdecode(page))
             p.parent.mkdir(exist_ok=True, parents=True)
             with p.open("wb") as f:
@@ -50,7 +50,7 @@ class CoverCache:
         k = self.key(comics, idx)
         p = self._directory / k[:2] / k[2:]
         if not p.exists():
-            name, page = Archive(library / comics).read(idx)
+            page = Archive(library / comics).read(idx)
             thumb = scale_to_fit(self._max_shape, imdecode(page))
             p.parent.mkdir(exist_ok=True, parents=True)
             with p.open("wb") as f:

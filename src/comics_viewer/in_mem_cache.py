@@ -36,8 +36,11 @@ class InMemCache:
         size = self.size()
         usage = sorted([(v, k) for k, v in self._lru.items()],
                        key=itemgetter(0))
-        while size > self._max_size:
+        while size > self.max_size:
             k = usage.pop(0)[1]
             size -= len(self._cache[k])
             del self._lru[k]
             del self._cache[k]
+
+    def fits(self, size: int) -> bool:
+        return self.size + size <= self.max_size

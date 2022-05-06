@@ -1,17 +1,16 @@
 from typing import Optional
-from pathlib import Path
 from .gi_helpers import Gtk, Gio, GLib, Gdk
 from .library import Library
-from .view import View, StatusBar
+from .view import View
 from .manage import Manage
-
-RESOURCE_BASE_DIR = Path(__file__).parent
+from .utils import RESOURCE_BASE_DIR
 
 
 class App(Gtk.Application):
-    def __init__(self, library: Library, *args, **kwargs):
+    def __init__(self, create_library, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._library = library
+        self._create_library = create_library
+        self._library: Optional[Library] = None
         self._view: Optional[View] = None
         self._manage: Optional[Manage] = None
         self.window: Optional[Gtk.ApplicationWindow] = None
@@ -20,23 +19,14 @@ class App(Gtk.Application):
         Gtk.Application.do_startup(self)
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "layout.glade"))
-        self._view = View(
-            area=builder.get_object("view"),
-            status_bar=StatusBar(
-                filename=builder.get_object("filename"),
-                progress=builder.get_object("progress"),
-                pagename=builder.get_object("pagename"),
-                bar=builder.get_object("statusbar"),
-                progress_bar=builder.get_object("progress_bar"))
-        )
+        self._view = View(area=builder.get_object("view"), builder=builder)
         self.window = builder.get_object("window")
+        self.add_window(self.window)
         self.stack = builder.get_object("stack")
 
-        self._library.view = builder.get_object("library_view")
-        self.library = builder.get_object("library")
-        self.library.bind_model(self._library.list_store,
-                                self._library.create_comics_box)
-        self.add_window(self.window)
+        self._library = self._create_library(builder=builder,
+                                             add_action=self.add_action,
+                                             app=self)
         self._manage = Manage(self._library, builder, self.add_action)
 
         lw = self._library.last_viewed
@@ -55,20 +45,8 @@ class App(Gtk.Application):
         self.window.connect("configure-event", self.configure_event)
         self.add_action(self.fs)
 
-        add_collection = Gio.SimpleAction.new("add-collection", None)
-        add_collection.connect("activate", self._library.add_collection_dialog)
-        self.add_action(add_collection)
-
-        self._library.remove_collection = Gio.SimpleAction.new(
-            "remove-collection", None)
-        self._library.remove_collection.set_enabled(False)
-        self.add_action(self._library.remove_collection)
-
-        self._library.refresh = Gio.SimpleAction.new("refresh-library", None)
-        self.add_action(self._library.refresh)
-
         self.add_accelerator("<Control>w", "app.quit", None)
-        self.add_accelerator("f", "app.fullscreen", None)
+        self.add_accelerator("<Control>f", "app.fullscreen", None)
         self.add_accelerator("<Control>c", "app.copy-title-manage", None)
         self.add_accelerator("<Control>v", "app.paste-title-manage", None)
         self.add_accelerator("<Control>s", "app.save-manage", None)
@@ -101,3 +79,7 @@ class App(Gtk.Application):
 
     def configure_event(self, widget, event):
         self.fs.set_state(GLib.Variant.new_boolean(self.fullscreen))
+
+    def view_comics(self, *args, **kwargs):
+        if self._view.load(*args, **kwargs):
+            self.stack.set_visible_child_name("view")

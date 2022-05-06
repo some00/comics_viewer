@@ -69,6 +69,7 @@
                     <property name="can-focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="vexpand">True</property>
+                    <property name="auto-render">False</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -183,82 +184,80 @@
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkBox" id="library_tools">
+                  <object class="GtkToolbar" id="library_toolbar">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="halign">end</property>
-                    <property name="margin-end">9</property>
-                    <property name="spacing">10</property>
                     <child>
-                      <object class="GtkComboBoxText" id="library_view">
+                      <object class="GtkToolItem">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="active">0</property>
-                        <items>
-                          <item id="continue" translatable="yes">Continue Reading</item>
-                          <item id="new" translatable="yes">New Comics</item>
-                          <item id="unsorted" translatable="yes">Unsorted Comics</item>
-                        </items>
+                        <child>
+                          <object class="GtkComboBoxText" id="library_view">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="active">0</property>
+                            <items>
+                              <item id="continue" translatable="yes">Continue Reading</item>
+                              <item id="new" translatable="yes">Missing metadata</item>
+                              <item id="unsorted" translatable="yes">Unsorted Comics</item>
+                            </items>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">0</property>
+                        <property name="homogeneous">False</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="add_collection">
-                        <property name="label">gtk-add</property>
+                      <object class="GtkToolButton" id="add_collection">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Add Collection</property>
                         <property name="action-name">app.add-collection</property>
-                        <property name="use-stock">True</property>
-                        <property name="always-show-image">True</property>
+                        <property name="label" translatable="yes">Add Collection</property>
+                        <property name="use-underline">True</property>
+                        <property name="stock-id">gtk-add</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="remove_collection">
-                        <property name="label">gtk-remove</property>
+                      <object class="GtkToolButton" id="remove_collection">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Remove Collection</property>
                         <property name="action-name">app.remove-collection</property>
-                        <property name="use-stock">True</property>
-                        <property name="always-show-image">True</property>
+                        <property name="label" translatable="yes">Remove Collection</property>
+                        <property name="use-underline">True</property>
+                        <property name="stock-id">gtk-remove</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">2</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton">
-                        <property name="label">gtk-refresh</property>
+                      <object class="GtkToolButton" id="refresh">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Refresh Library</property>
                         <property name="action-name">app.refresh-library</property>
-                        <property name="use-stock">True</property>
-                        <property name="always-show-image">True</property>
+                        <property name="label" translatable="yes">Refresh Library</property>
+                        <property name="use-underline">True</property>
+                        <property name="stock-id">gtk-refresh</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">3</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="padding">2</property>
                     <property name="position">0</property>
                   </packing>
                 </child>
@@ -288,7 +287,7 @@
                   <packing>
                     <property name="expand">False</property>
                     <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
                 </child>
               </object>
@@ -304,81 +303,77 @@
                 <property name="can-focus">False</property>
                 <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkBox" id="manage_tools">
+                  <object class="GtkToolbar" id="manage_toolbar">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="halign">center</property>
-                    <property name="spacing">10</property>
                     <child>
-                      <object class="GtkButton" id="save_manage">
-                        <property name="label">gtk-save</property>
+                      <object class="GtkToolButton" id="save_manage">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Save changes</property>
                         <property name="action-name">app.save-manage</property>
-                        <property name="use-stock">True</property>
+                        <property name="label" translatable="yes">Save</property>
+                        <property name="use-underline">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">0</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="discard_manage">
-                        <property name="label">gtk-discard</property>
+                      <object class="GtkToolButton" id="discard_manage">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Discard changes</property>
                         <property name="action-name">app.discard-manage</property>
-                        <property name="use-stock">True</property>
+                        <property name="label" translatable="yes">Discard</property>
+                        <property name="use-underline">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="autoincrement_manage">
-                        <property name="label" translatable="yes">Autoindex</property>
+                      <object class="GtkToolButton" id="autoincrement_manage">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Autoincrement issue numbers</property>
                         <property name="action-name">app.autoincrement-manage</property>
+                        <property name="label" translatable="yes">Autoindex</property>
+                        <property name="use-underline">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">2</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="copy_title_manage">
-                        <property name="label" translatable="yes">Copy Title</property>
+                      <object class="GtkToolButton" id="copy_title_manage">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Copy title to internal clipboard</property>
                         <property name="action-name">app.copy-title-manage</property>
+                        <property name="label" translatable="yes">Copy Title</property>
+                        <property name="use-underline">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">3</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="paste_title_manage">
-                        <property name="label" translatable="yes">Paste Title</property>
+                      <object class="GtkToolButton" id="paste_title_manage">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
+                        <property name="can-focus">False</property>
+                        <property name="tooltip-text" translatable="yes">Paste title to internal clipboar</property>
                         <property name="action-name">app.paste-title-manage</property>
+                        <property name="label" translatable="yes">Paste Title</property>
+                        <property name="use-underline">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">4</property>
+                        <property name="homogeneous">True</property>
                       </packing>
                     </child>
                   </object>
@@ -455,7 +450,7 @@
                   <packing>
                     <property name="expand">True</property>
                     <property name="fill">True</property>
-                    <property name="position">1</property>
+                    <property name="position">2</property>
                   </packing>
                 </child>
               </object>

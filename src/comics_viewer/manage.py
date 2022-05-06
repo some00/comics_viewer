@@ -3,7 +3,7 @@ from enum import IntEnum
 
 from .library import Library, Collection, Comics, Lib
 from .gi_helpers import Gtk, Gio
-from .utils import diff_opcodes, Opcode
+from .utils import wrap_add_action, refresh_gtk_model
 
 STACK_NAME = "manage"
 TVC = Gtk.TreeViewColumn
@@ -30,11 +30,7 @@ class Manage:
         self._session = self._library.new_session
         self._clipboard_title: Optional[str] = None
 
-        def add_action(name, handler, add_action=add_action):
-            rv = Gio.SimpleAction.new(name, None)
-            rv.connect("activate", lambda *x, handler=handler: handler())
-            add_action(rv)
-            return rv
+        add_action = wrap_add_action(add_action)
         self._save_action = add_action("save-manage", self.save)
         self._discard_action = add_action("discard-manage", self.discard)
         self._autoincrement_action = add_action("autoincrement-manage",
@@ -144,34 +140,13 @@ class Manage:
             0 if cover_idx is None else cover_idx,
             id,
         ) for (path, title, issue, cover_idx, id) in comics]
-        self._refresh_model(self._comics.get_model(), comics)
+        refresh_gtk_model(self._comics.get_model(), comics)
 
     def _refresh_collections(self):
         collections = [(row[0], False, row[1]) for row in self._session.query(
             Collection.name, Collection.id).join(Lib).filter_by(
-                path=str(self._library.path)).all()]
-        self._refresh_model(self._collections.get_model(), collections)
-
-    def _refresh_model(self, model, target):
-        ms = list(model)
-        for code, i1, i2, j1, j2 in diff_opcodes(ms, target):
-            if code == Opcode.insert:
-                for i, j in zip(range(i1, i1 + j2 - j1), range(j1, j2)):
-                    model.insert(i, target[j])
-            elif code == Opcode.delete:
-                for i in range(i1, i2):
-                    it = model.iter_nth_child(None, i1)
-                    if it is not None:
-                        model.remove(it)
-            elif code == Opcode.replace:
-                for i, j in zip(range(i1, i2 + 1), range(j1, j2 + 1)):
-                    if i < len(model) and j < len(target):
-                        model.set_row(model.iter_nth_child(None, i),
-                                      target[j])
-                    elif i >= len(model) and j < len(target):
-                        model.insert(i, target[j])
-                    elif j >= len(target) and i < len(model):
-                        model.remove(model.iter_nth_child(None, i))
+                path=str(self._library.path)).order_by(Collection.name).all()]
+        refresh_gtk_model(self._collections.get_model(), collections)
 
     def _comics_changed(self, selection: Gtk.TreeSelection):
         model, paths = selection.get_selected_rows()
@@ -249,6 +224,7 @@ class Manage:
         comics = self._comics_by_id(model[path][ComicsColumn.id])
         if comics.issue == issue:
             return
+        comics.issue = issue
         self._session.add(comics)
         self._set_session_action_states()
 
