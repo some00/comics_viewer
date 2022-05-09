@@ -76,8 +76,6 @@ class Manage:
         self._collections.get_selection().set_mode(Gtk.SelectionMode.NONE)
 
         self._stack = builder.get_object("stack")
-        self._stack.connect("notify::visible-child-name",
-                            self.set_visible_child_name)
         self._switcher = builder.get_object("switcher")
 
         self._set_session_action_states()
@@ -117,15 +115,11 @@ class Manage:
         self._copy_title_action.set_enabled(copy)
         self._paste_title_action.set_enabled(paste)
 
-    def set_visible_child_name(self, stack, param):
-        if stack.get_visible_child_name() == STACK_NAME:
-            self.refresh()
-        self._set_clipboad_action_states()
-
     def refresh(self):
         self._refresh_comics()
         self._refresh_collections()
         self._comics.get_selection().unselect_all()
+        self._set_clipboad_action_states()
 
     def _refresh_comics(self):
         comics = self._session.query(
@@ -137,7 +131,7 @@ class Manage:
             path,
             "" if title is None else title,
             0 if issue is None else issue,
-            0 if cover_idx is None else cover_idx,
+            1 if cover_idx is None else cover_idx + 1,
             id,
         ) for (path, title, issue, cover_idx, id) in comics]
         refresh_gtk_model(self._comics.get_model(), comics)
@@ -230,17 +224,18 @@ class Manage:
 
     def _cover_edited(self, renderer, path, new_text):
         try:
-            cover = int(new_text)
+            cover_idx = int(new_text) - 1
         except ValueError:
             return
         model = self._comics.get_model()
         comics = self._comics_by_id(model[path][ComicsColumn.id])
-        if cover >= comics.pages:
+        if 0 > cover_idx or cover_idx >= comics.pages:
             return
-        model.set_value(model.get_iter(path), ComicsColumn.cover, cover)
-        if comics.cover_idx == cover:
+        model.set_value(model.get_iter(path),
+                        ComicsColumn.cover, cover_idx + 1)
+        if comics.cover_idx == cover_idx:
             return
-        comics.cover_idx = cover
+        comics.cover_idx = cover_idx
         self._session.add(comics)
         self._set_session_action_states()
 

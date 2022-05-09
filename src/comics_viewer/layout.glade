@@ -28,6 +28,7 @@
   </object>
   <object class="GtkApplicationWindow" id="window">
     <property name="can-focus">False</property>
+    <property name="title" translatable="yes">Comics Viewer</property>
     <child>
       <object class="GtkBox" id="root_box">
         <property name="visible">True</property>
@@ -56,20 +57,32 @@
             <property name="hexpand">True</property>
             <property name="vexpand">True</property>
             <child>
-              <object class="GtkBox" id="view_box">
+              <object class="GtkBox" id="view_vbox">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="hexpand">True</property>
-                <property name="vexpand">True</property>
-                <property name="orientation">vertical</property>
                 <child>
-                  <object class="GtkGLArea" id="view">
+                  <object class="GtkScrolledWindow" id="thumb_scrolled_window">
                     <property name="visible">True</property>
-                    <property name="app-paintable">True</property>
-                    <property name="can-focus">False</property>
-                    <property name="hexpand">True</property>
-                    <property name="vexpand">True</property>
-                    <property name="auto-render">False</property>
+                    <property name="can-focus">True</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <property name="vscrollbar-policy">always</property>
+                    <property name="shadow-type">in</property>
+                    <property name="overlay-scrolling">False</property>
+                    <property name="propagate-natural-width">True</property>
+                    <child>
+                      <object class="GtkViewport">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkFlowBox" id="thumb">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="homogeneous">True</property>
+                            <property name="max-children-per-line">1</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -78,16 +91,48 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkBox" id="statusbar">
+                  <object class="GtkBox" id="view_hbox">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="margin-start">4</property>
-                    <property name="margin-end">4</property>
-                    <property name="spacing">7</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="orientation">vertical</property>
                     <child>
-                      <object class="GtkLabel" id="filename">
+                      <object class="GtkEventBox" id="view_event_box">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
+                        <property name="events">GDK_POINTER_MOTION_MASK | GDK_ENTER_NOTIFY_MASK | GDK_STRUCTURE_MASK</property>
+                        <child>
+                          <object class="GtkOverlay" id="overlay">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <child>
+                              <object class="GtkGLArea" id="view">
+                                <property name="visible">True</property>
+                                <property name="app-paintable">True</property>
+                                <property name="can-focus">True</property>
+                                <property name="has-focus">True</property>
+                                <property name="is-focus">True</property>
+                                <property name="events">GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK | GDK_STRUCTURE_MASK</property>
+                                <property name="hexpand">True</property>
+                                <property name="vexpand">True</property>
+                                <property name="auto-render">False</property>
+                              </object>
+                              <packing>
+                                <property name="index">-1</property>
+                              </packing>
+                            </child>
+                            <child type="overlay">
+                              <object class="GtkDrawingArea">
+                                <property name="name">view_drawing</property>
+                                <property name="visible">True</property>
+                                <property name="can-focus">False</property>
+                                <property name="hexpand">True</property>
+                                <property name="vexpand">True</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -96,79 +141,148 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSeparator">
+                      <object class="GtkBox" id="statusbar">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
+                        <property name="margin-start">4</property>
+                        <property name="margin-end">4</property>
+                        <property name="spacing">7</property>
+                        <child>
+                          <object class="GtkLabel" id="comics">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">2</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="progress">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">4</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">5</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="img_shape">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">5</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">6</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="pagename">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">6</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">8</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="encoded_size">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">9</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkSeparator">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">10</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkProgressBar" id="progress_bar">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="valign">center</property>
+                            <property name="hexpand">True</property>
+                            <property name="pulse-step">0.099999999776482579</property>
+                            <property name="ellipsize">middle</property>
+                          </object>
+                          <packing>
+                            <property name="expand">False</property>
+                            <property name="fill">True</property>
+                            <property name="position">11</property>
+                          </packing>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="pagename">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
+                        <property name="fill">False</property>
                         <property name="position">2</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkSeparator">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">3</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkLabel" id="progress">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">4</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkSeparator">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">5</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkProgressBar" id="progress_bar">
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="valign">center</property>
-                        <property name="hexpand">True</property>
-                        <property name="pulse-step">0.099999999776482579</property>
-                        <property name="ellipsize">middle</property>
-                      </object>
-                      <packing>
-                        <property name="expand">False</property>
-                        <property name="fill">True</property>
-                        <property name="position">6</property>
                       </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
-                    <property name="fill">False</property>
+                    <property name="fill">True</property>
                     <property name="position">1</property>
                   </packing>
                 </child>
@@ -266,6 +380,7 @@
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
                     <property name="shadow-type">in</property>
+                    <property name="overlay-scrolling">False</property>
                     <child>
                       <object class="GtkViewport" id="library_viewport">
                         <property name="visible">True</property>
@@ -274,8 +389,8 @@
                           <object class="GtkFlowBox" id="library">
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
+                            <property name="valign">start</property>
                             <property name="hexpand">True</property>
-                            <property name="vexpand">True</property>
                             <property name="column-spacing">2</property>
                             <property name="row-spacing">2</property>
                             <property name="max-children-per-line">6</property>
@@ -397,6 +512,7 @@
                         <property name="hexpand">True</property>
                         <property name="vexpand">True</property>
                         <property name="shadow-type">in</property>
+                        <property name="overlay-scrolling">False</property>
                         <child>
                           <object class="GtkTreeView" id="manage_comics">
                             <property name="visible">True</property>
@@ -425,6 +541,7 @@
                         <property name="hexpand">True</property>
                         <property name="vexpand">True</property>
                         <property name="shadow-type">in</property>
+                        <property name="overlay-scrolling">False</property>
                         <child>
                           <object class="GtkTreeView" id="manage_collections">
                             <property name="visible">True</property>

@@ -6,7 +6,7 @@ from difflib import SequenceMatcher
 from enum import IntEnum
 import numpy.typing as npt
 
-from .gi_helpers import Gio, Gtk
+from .gi_helpers import Gio, Gtk, GdkPixbuf
 
 
 RESOURCE_BASE_DIR = Path(__file__).parent
@@ -21,6 +21,14 @@ def scale_to_fit(dst, src):
 
 def imdecode(buf: bytes) -> npt.NDArray:
     return cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
+
+
+def imencode(img: npt.NDArray) -> bytes:
+    ok, rv = cv2.imencode(".png", img, [
+        cv2.IMWRITE_PNG_COMPRESSION, 9,
+    ])
+    assert(ok)
+    return rv
 
 
 class Opcode(IntEnum):
@@ -87,3 +95,27 @@ def refresh_gio_model(model: Gio.ListModel, target: List[Any]):
             model[i1:i2] = target[j1:j2]
         elif code == Opcode.delete:
             del model[i1:i2]
+
+
+def dfs_gen(path: Path, base=None):
+    if base is None:
+        base = path
+    for child in path.iterdir():
+        assert(not child.is_symlink())
+        if child.is_dir():
+            for grand in dfs_gen(child, base):
+                yield grand
+            yield child.relative_to(base)
+        else:
+            yield child.relative_to(base)
+
+
+def np_to_pixbuf(arr: npt.NDArray) -> GdkPixbuf.Pixbuf:
+    return GdkPixbuf.Pixbuf.new_from_data(
+        data=cv2.cvtColor(arr, cv2.COLOR_BGR2RGB).tobytes(),
+        colorspace=GdkPixbuf.Colorspace.RGB,
+        has_alpha=False,
+        bits_per_sample=8,
+        width=arr.shape[1],
+        height=arr.shape[0],
+        rowstride=arr.shape[1] * 3)

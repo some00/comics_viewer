@@ -13,30 +13,18 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import null
 from itertools import chain
 from enum import Enum
-import numpy.typing as npt
-import cv2
 
 from .archive import ARCHIVE_TYPES, list_archive
 from .cover_cache import CoverCache
-from .gi_helpers import Gio, Gtk, GObject, GLib, GdkPixbuf
+from .gi_helpers import Gio, Gtk, GObject, GLib
 from .utils import (
-    wrap_add_action, refresh_gtk_model, refresh_gio_model, RESOURCE_BASE_DIR
+    wrap_add_action, refresh_gtk_model, refresh_gio_model, RESOURCE_BASE_DIR,
+    np_to_pixbuf,
 )
 
 
 COLLECTION_PREFIX = "collection_"
 Base = declarative_base()
-
-
-def np_to_pixbuf(arr: npt.NDArray) -> GdkPixbuf.Pixbuf:
-    return GdkPixbuf.Pixbuf.new_from_data(
-        data=cv2.cvtColor(arr, cv2.COLOR_BGR2RGB).tobytes(),
-        colorspace=GdkPixbuf.Colorspace.RGB,
-        has_alpha=False,
-        bits_per_sample=8,
-        width=arr.shape[1],
-        height=arr.shape[0],
-        rowstride=arr.shape[1] * 3)
 
 
 class FixedViews(Enum):
@@ -73,7 +61,10 @@ class Comics(Base):
     issue = Column(Integer, nullable=True)
     cover_idx = Column(Integer, nullable=True)
 
-    progress = relationship("Progress", back_populates="comics", uselist=False)
+    progress = relationship("Progress",
+                            back_populates="comics",
+                            uselist=False,
+                            cascade="all, delete-orphan")
     lib_id = Column(Integer, ForeignKey("library.id"), nullable=False)
     lib = relationship("Lib", back_populates="comics")
 
@@ -88,7 +79,7 @@ class Progress(Base):
     page_idx = Column(Integer, nullable=False)
     last_read = Column(DateTime, nullable=False)
 
-    comics_id = Column(Integer, ForeignKey("comics.id"))
+    comics_id = Column(Integer, ForeignKey("comics.id"), nullable=False)
     comics = relationship("Comics", back_populates="progress")
 
 
@@ -143,14 +134,11 @@ class Library:
         self.list_store = Gio.ListStore()
 
         self.view = builder.get_object("library_view")
-        self.view.connect("changed", lambda view: self._refresh_models())
+        self.view.connect("changed", lambda view: self.refresh_models())
 
         flowbox = builder.get_object("library")
         flowbox.bind_model(self.list_store, self.create_comics_box)
         flowbox.connect("child-activated", self.comics_activated)
-
-        builder.get_object("stack").connect("notify::visible-child-name",
-                                            self.set_visible_child_name)
 
         self._to_process: Iterable[Union[Path, Comics]] = []
         self._idle_id: Optional[int] = None
@@ -172,8 +160,6 @@ class Library:
         self.refresh = add_action("refresh-library", self.start_refresh)
         self.refresh.set_enabled(self._idle_id is None)
 
-        self._refresh_models()
-
     def start_refresh(self):
         session = self.new_session
         lib = session.query(Lib).filter(
@@ -192,7 +178,7 @@ class Library:
             session.commit()
             self._idle_id = None
             self.set_action_states()
-            self._refresh_models()
+            self.refresh_models()
             self._cover_cache.start_idle(
                 self._library,
                 [(Path(p), 0 if idx is None else idx) for p, idx in
@@ -239,8 +225,9 @@ class Library:
 
     @property
     def last_viewed(self) -> Optional[Tuple[Path, int]]:
-        # TODO
-        return None
+        return self.new_session.query(Comics).join(Progress).filter(
+            Comics.pages - 1 != Progress.page_idx
+        ).order_by(Progress.last_read.desc()).limit(1).one_or_none()
 
     def create_comics_box(self, obj: ComicsIcon):
         title, path, pages, cover_idx, progress, issue = (
@@ -275,7 +262,9 @@ class Library:
         comics = child.get_child().comics
         page_idx = comics.progress.page_idx if (
             comics.progress is not None and
-            comics.progress is not None) else 0
+            comics.progress.page_idx is not None and
+            comics.pages - 1 != comics.progress.page_idx
+        ) else 0
         self._app.view_comics(self.path, comics, page_idx)
 
     def add_collection_dialog(self):
@@ -356,7 +345,7 @@ class Library:
         )
         self.refresh.set_enabled(idle)
 
-    def _refresh_models(self):
+    def refresh_models(self):
         self._refresh_view_model()
         self._refresh_flowbox()
         self.set_action_states()
@@ -365,7 +354,9 @@ class Library:
         id = self.view.get_active_id()
         comics: Optional[Iterable[Comics]] = None
         if id == FixedViews.cont.value:
-            pass  # TODO
+            comics = self.new_session.query(Comics).join(
+                Progress).filter(Comics.pages - 1 != Progress.page_idx
+                                 ).order_by(Progress.last_read.desc())
         elif id == FixedViews.new.value:
             comics = self.new_session.query(Comics).filter(
                 Comics.title == null(),
@@ -380,7 +371,9 @@ class Library:
         elif id.startswith(COLLECTION_PREFIX):
             collection_name = id[len(COLLECTION_PREFIX):]
             comics = self.new_session.query(Comics).join(
-                Collection.comics).filter(Collection.name == collection_name)
+                Collection.comics).filter(
+                    Collection.name == collection_name
+                ).order_by(Comics.title, Comics.issue, Comics.path)
 
         if comics is not None:
             refresh_gio_model(self.list_store, list(map(ComicsIcon, comics)))
@@ -392,7 +385,3 @@ class Library:
         )]
         offset = len(FixedViews.__members__)
         refresh_gtk_model(self.view.get_model(), new, offset)
-
-    def set_visible_child_name(self, stack, param):
-        if stack.get_visible_child_name() == "library":
-            self._refresh_models()
