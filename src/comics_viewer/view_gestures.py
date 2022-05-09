@@ -1,8 +1,17 @@
 from typing import Optional
 import numpy as np
-import numpy.typing as npt
+from collections import namedtuple
 
+from .utils import is_in
 from .gi_helpers import Gtk, Gdk
+
+
+DragData = namedtuple("DragData", [
+    "start_pos",
+    "affine",
+    "start_widget",
+    "start_img",
+])
 
 
 def gesture_msg(*args, **kwargs):
@@ -26,13 +35,18 @@ class ViewGestures:
         self._drag.connect("drag-begin", self.drag_begin)
         self._drag.connect("drag-end", self.drag_end)
         self._drag.connect("drag-update", self.drag_update)
-        self._drag.connect("cancel", self.drag_cancel)
-        self._position_at_begin: Optional[npt.NDArray] = None
+        self._drag_data: Optional[DragData] = None
 
         self._swipe = Gtk.GestureSwipe.new(event_box)
         self._swipe.connect("swipe", self.swipe)
 
-        event_box.connect("event", self.event)
+        event_box.connect("motion-notify-event", self.motion_notify)
+        event_box.connect("leave-notify-event", self.leave_notify)
+        event_box.connect("button-press-event", self.button_press)
+        event_box.connect("button-release-event", self.button_release)
+        # ERASER 1 and PEN 1 works on touching the display
+        # PEN 2 need proximity only
+        # MOTION_NOTIFY indicates proximity reached
 
     def zoom_begin(self, gesture: Gtk.GestureZoom,
                    sequence: Optional[Gdk.EventSequence]):
@@ -58,79 +72,59 @@ class ViewGestures:
     def drag_begin(self, gesture: Gtk.GestureDrag,
                    start_x: float, start_y: float):
         gesture_msg("drag begin")
-        self._position_at_begin = self._view.position
-        self._start_drag_widget = np.array([start_y, start_x])
-        self._start_drag_img = self._view.widget_to_img(
-            self._start_drag_widget)
-        # self._start_img = self._view.widget_to_img(
-        #     np.array([start_y, start_x]))
-
-    def get_offset(self, gesture: Gtk.GestureDrag):
-        ok, offset_x, offset_y = gesture.get_offset()
-        assert(ok)
-        offset = np.array([offset_y, offset_x])
-
-        """
-        ok, start_x, start_y = gesture.get_start_point()
-        assert(ok)
         start = np.array([start_y, start_x])
-
-        print("debug pos", start_img)
-        return np.array([50, 0])
-        # start_img = self._view.widget_to_img(start)
-        end_img = self._view.widget_to_img(self._start_img + offset)
-        rv = end_img - start_img
-        rv = self._view.widget_to_img(offset)
-        """
-        return self._view.widget_to_img(self._start_drag_widget + offset
-                                        ) - self._start_drag_img
-
-    def drag_end(self, gesture: Gtk.GestureDrag,
-                 offset_x: float, offset_y: float):
-        gesture_msg("drag end", offset_x, offset_y)
-        offset = self.get_offset(gesture)
-        if np.isclose(np.linalg.norm(offset), 0):
-            pass
-        else:
-            self._view.position = self._position_at_begin + offset
-        self._position_at_begin = None
-        self._start_img = None
+        self._drag_data = DragData(
+            start_pos=self._view.position,
+            affine=self._view.affine(),
+            start_widget=start,
+            start_img=self._view.widget_to_img(start, self._view.affine()),
+        )
 
     def drag_update(self, gesture: Gtk.GestureDrag,
                     offset_x: float, offset_y: float):
         gesture_msg("drag update")
-        offset = self.get_offset(gesture)
-        self._view.position = self._position_at_begin + offset
+        offset = np.array([offset_y, offset_x])
+        self._view.position = self._drag_data.start_pos - (
+            self._view.widget_to_img(
+                self._drag_data.start_widget + offset,
+                self._drag_data.affine) - self._drag_data.start_img
+        )
 
-    def drag_cancel(self, gesture: Gtk.GestureDrag,
-                    sequence: Optional[Gdk.EventSequence]):
-        gesture_msg("drag cancel")
+    def drag_end(self, gesture: Gtk.GestureDrag,
+                 offset_x: float, offset_y: float):
+        gesture_msg("drag end", offset_x, offset_y)
+        self._drag_data = None
 
     def swipe(self, gesture: Gtk.GestureSwipe,
               velocity_x: float, velocity_y: float):
         gesture_msg("swipe")
 
-    def event(self, event_box: Gtk.EventBox, event: Gdk.Event):
-        return False
+    def pen_event(self):
+        event = Gtk.get_current_event()
         source_device = event.get_source_device()
         if source_device is None:
             return False
-        source: Gdk.InputSource = event.get_source_device().get_source()
-        if source not in [Gdk.InputSource.PEN, Gdk.InputSource.ERASER]:
+        return source_device.get_source() in [
+            Gdk.InputSource.PEN, Gdk.InputSource.ERASER,
+        ]
+
+    def motion_notify(self, event_box: Gtk.EventBox, event: Gdk.EventMotion):
+        if not self.pen_event():
             return False
-        # ERASER 1 and PEN 1 works on touching the display
-        # PEN 2 need proximity only
-        # MOTION_NOTIFY indicates proximity reached
-        if event.type == Gdk.EventType.LEAVE_NOTIFY:
-            # print(event.type)
-            pass
-        elif event.type == Gdk.EventType.MOTION_NOTIFY:
-            # print(event.type)
-            pass
-        elif event.type == Gdk.EventType.BUTTON_PRESS:
-            # print(event.button.button, source)
-            pass
-        elif event.type == Gdk.EventType.BUTTON_RELEASE:
-            # print(event.button.button, source)
-            pass
+        pos = is_in(event_box, event.x, event.y)
+        if pos is None:
+            return False
+        """
+        self._view._status.comics.set_label(str(self._view.widget_to_img(
+            pos).astype(int)))
+        """
         return True
+
+    def leave_notify(self, event_box, event):
+        return self.pen_event()
+
+    def button_press(self, event_box, event):
+        return self.pen_event()
+
+    def button_release(self, event_box, event):
+        return self.pen_event()

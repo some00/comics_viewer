@@ -10,6 +10,7 @@ from ctypes import c_void_p
 import numpy as np
 import numpy.typing as npt
 from transforms3d.affines import compose as affine_compose
+from transforms3d.axangles import axangle2mat
 from datetime import datetime
 import humanize
 
@@ -33,15 +34,19 @@ Actions = namedtuple("Actions", [
 
 VERTEX_DATA = np.array([
     # positions        texture coords
-    1.0,   1.0, 0.0,   1.0, 0.0,      # top right
-    1.0,  -1.0, 0.0,   1.0, 1.0,      # bottom right
-    -1.0, -1.0, 0.0,   0.0, 1.0,      # bottom left
-    -1.0,  1.0, 0.0,   0.0, 0.0       # top left
+    1.0,   1.0, 0.0,   1.0, 1.0,      # top right
+    1.0,  -1.0, 0.0,   1.0, 0.0,      # bottom right
+    -1.0, -1.0, 0.0,   0.0, 0.0,      # bottom left
+    -1.0,  1.0, 0.0,   0.0, 1.0       # top left
 ], dtype="f")
 INDICES_DATA = np.array([
     0, 1, 3,
     1, 2, 3,
 ], dtype=np.uint32)
+
+
+def cat(x, *v):
+    return np.concatenate([x, v])
 
 
 @contextmanager
@@ -218,7 +223,7 @@ class View:
             )
             session.add(comics)
         self._page_changed = True
-        self._scale = 3.0
+        self._scale = 1.0
         self.position = np.zeros(2)
         self._area.queue_render()
         self._thumb.scroll_to(page_idx)
@@ -233,10 +238,6 @@ class View:
         self._img_shape = np.array(img_shape)
         self._status.img_shape.set_label(
             "x".join(map(str, np.flip(self._img_shape))))
-        """
-        self.position = self._img_shape / 2
-        self.position[0] = 0
-        """
 
     @property
     def encoded_size(self) -> Optional[int]:
@@ -254,7 +255,7 @@ class View:
 
     @scale.setter
     def scale(self, scale: float):
-        self._scale = np.clip(scale, 1.0, 4.0)
+        self._scale = np.clip(scale, 0.5, 4.0)
         self._area.queue_render()
 
     @property
@@ -264,24 +265,81 @@ class View:
     @position.setter
     def position(self, position: npt.NDArray):
         self._position = position
-        print("position", self._position)
         self._area.queue_render()
 
     @property
+    def angle(self):
+        viewport_aspect = np.divide(*self.viewport)
+        aspects = {
+            abs(np.divide(
+                *self.img_shape) - viewport_aspect): 0,
+            abs(np.divide(
+                *np.flip(self.img_shape)) - viewport_aspect): np.pi / 2
+        }
+        return aspects[min(aspects.keys())]
+
+    def m_rotation(self):
+        angle = self.angle
+        return axangle2mat([0, 0, 1.0], angle)
+
+    def m_zoom(self):
+        return self.keep_aspect() * self.scale
+
+    def m_translate(self):
+        # temp var
+        p = self.position.copy()
+        # translate by the inverse of position
+        p *= -1.0
+        # scale by the user selected zoom level
+        p *= self.scale
+        # normalize
+        p /= (self.img_shape / np.flip(self.keep_aspect()))
+        # scale to vertex coords [0, 1]
+        p *= 2.0
+        # invert y
+        p *= [-1.0, 1.0]
+        # rotate by current image rotation
+        p = np.dot(cat(p, 0.0), self.m_rotation())[:2]
+        # flip for (x, y)
+        p = np.flip(p)
+        return p
+
     def keep_aspect(self):
         if self.img_shape is None:
             return np.array([1.0, 1.0])
-        rv = self.viewport / self.img_shape
+        vp = np.abs(np.dot(cat(self.viewport, 0), self.m_rotation()))[:2]
+        rv = vp / self.img_shape
         rv /= max(rv)
         return rv
 
-    def widget_to_img(self, pos: npt.NDArray):
-        normal = (pos - self.viewport / 2) / self.viewport * [-2, 2]
-        normal = np.concatenate([normal, [0, 1]])
-        z, t = self.affine_components()
-        gl_pos = np.dot(self.affine(z=np.flip(1 / z), t=-t), normal)
-        img = self.img_shape * (gl_pos[:2] - [1, -1]) / [-2, 2] * self.scale
+    def widget_to_img(self, pos: npt.NDArray, affine=None):
+        if affine is None:
+            affine = self.affine()
+        device = np.flip(
+            (pos - self.viewport / 2.0) / self.viewport * 2.0 * [-1.0, 1.0]
+        )
+        world = np.dot(cat(device, 0.0, 1.0), np.linalg.inv(affine))[:2]
+        img = (world - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * np.flip(
+            self.img_shape)
+        return np.flip(img[:2])
+
+    def offset_to_img(self, offset: npt.NDArray, affine=None):
+        if affine is None:
+            affine = self.affine()
+        device = np.flip(
+            offset / self.viewport * 2 * [-1.0, 1.0]
+        )
+        world = np.dot(cat(device, 0.0, 1.0), np.linalg.inv(affine))[:2]
+        img = (world - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * np.flip(
+            self.img_shape)
+        img = np.flip(world / 2.0 * [1.0, -1.0] * np.flip(self.img_shape)[:2])
         return img
+        return dict(
+            device=device,
+            world=world,
+            img=img,
+        )
+        return np.flip(img[:2])
 
     def load(self, base: Path, comics: Comics, page_idx: int) -> bool:
         path = base / comics.path
@@ -332,22 +390,10 @@ class View:
         OGL.glFlush()
         return True
 
-    def affine_components(self):
-        z = self.keep_aspect * self.scale
-        t = self.position / self.img_shape * 2 * np.array([-1.0, 1.0])
-        # t = (self.position / self.img_shape) * 2 * np.array([-1, 1])
-        t = np.flip(t)
-        t *= self.keep_aspect
-        print("translate", t)
-        return z, t
-
-    def affine(self, z=None, t=None):
-        if z is None and t is None:
-            z, t = self.affine_components()
-        Z = np.concatenate([z, [1]])
-        T = np.concatenate([t, [0]])
-        A = affine_compose(Z=Z, T=T, R=np.eye(3))
-        return A.T.astype(np.float32)
+    def affine(self):
+        return affine_compose(Z=cat(self.m_zoom(), 1),
+                              T=cat(self.m_translate(), 0),
+                              R=self.m_rotation()).T.astype(np.float64)
 
     def _realize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
         area.make_current()

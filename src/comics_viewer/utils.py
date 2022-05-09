@@ -119,3 +119,13 @@ def np_to_pixbuf(arr: npt.NDArray) -> GdkPixbuf.Pixbuf:
         width=arr.shape[1],
         height=arr.shape[0],
         rowstride=arr.shape[1] * 3)
+
+
+def is_in(widget: Gtk.Widget, x: int, y: int):
+    pos = np.array([x, y])
+    rect = widget.get_allocation()
+    shape = np.array([rect.width, rect.height])
+    if np.all(np.zeros(2) < pos) and np.all(pos <= shape):
+        return np.flip(pos).astype(np.float64)
+    else:
+        return None
