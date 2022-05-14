@@ -4,14 +4,15 @@ import numpy.typing as npt
 import cairo
 from dataclasses import dataclass, field
 from contextlib import contextmanager
+from shapely.geometry import MultiPoint, box, Polygon, Point
+from shapely.ops import clip_by_rect
 
 from .gi_helpers import Gtk
-from .utils import Rect as Tile
 from .cursor import CursorIcon
 
 
 WidgetPos = NewType("WidgetPos", npt.NDArray)
-ImagePos = NewType("ImagePos", npt.NDArray)
+ImagePos = NewType("ImagePos", Point)
 
 
 def html(s: str):
@@ -58,7 +59,7 @@ class Tiles:
 
         self._show_tiles = False
         self._cursor: Optional[ImagePos] = None
-        self._tiles: List[Tile] = []
+        self._tiles: List[Polygon] = []
         self._begin: Optional[ImagePos] = None
         self._erase = False
         self._last_activity: Optional[float] = None
@@ -66,16 +67,19 @@ class Tiles:
         self._colors = Colors()
 
     def w2i(self, pos: WidgetPos) -> ImagePos:
-        return self._view.widget_to_img(pos)
+        return Point(np.flip(self._view.widget_to_img(pos)))
 
     def i2w(self, pos: ImagePos) -> WidgetPos:
-        return self._view.img_to_widget(pos)
+        return self._view.img_to_widget(np.flip(
+            np.array(pos.coords).reshape(2)))
 
     def _draw(self, area: Gtk.DrawingArea, cr: cairo.Context):
         if not self._show_tiles:
             return
 
         def t(p):
+            if isinstance(p, tuple):
+                p = Point(*p)
             return np.flip(self.i2w(p))
 
         cr.select_font_face("monospace", cairo.FontSlant.NORMAL,
@@ -90,41 +94,42 @@ class Tiles:
                 cr.set_source_rgba(
                     *self._colors.tile[idx % len(self._colors.tile)])
                 cr.set_line_width(2)
-            tl, br = t(tile.tl), t(tile.br)
-            cr.rectangle(*tl, *(br - tl))
+            cr.move_to(*t(tile.exterior.coords[0]))
+            for p in tile.exterior.coords[1:]:
+                cr.line_to(*t(p))
+            cr.line_to(*t(tile.exterior.coords[0]))
             cr.stroke()
 
-            cr.move_to(*(tl + (br - tl) / 2))
+            cr.move_to(*t(tile.representative_point()))
             with save(cr):
                 cr.rotate(-self._view.angle)
                 cr.show_text(f"{idx + 1}")
 
         if self._erase:
             cr.set_source_rgba(*self._colors.erase)
-            cr.set_dash([3, 2])
+            cr.set_dash([5, 2])
             cr.set_line_width(1)
         else:
             cr.set_source_rgba(*self._colors.pending)
             cr.set_line_width(2)
         if self._begin is not None and self._cursor is not None:
-            tl, br = t(self._begin), t(self._cursor)
-            cr.rectangle(*tl, *(br - tl))
+            a, b = t(self._begin), t(self._cursor)
+            cr.rectangle(*a, *(b - a))
         cr.stroke()
 
     def to_be_erased(self) -> List[int]:
         rv = []
         if not self._erase or self._cursor is None or self._begin is None:
             return rv
-        selection = Tile(self._begin, self._cursor)
+        selection = box(*MultiPoint([self._begin, self._cursor]).bounds)
         for idx, tile in enumerate(self._tiles):
-            if selection.contains(tile.tl) and selection.contains(tile.br):
+            if selection.contains(tile):
                 rv.append(idx)
         if rv:
             return rv
         for idx, tile in enumerate(self._tiles):
-            if (
-                tile.contains(selection.tl) and tile.contains(selection.br) and
-                (not rv or self._tiles[rv[0]].area > tile.area)
+            if tile.contains(selection) and (
+                not rv or self._tiles[rv[0]].area > tile.area
             ):
                 rv = [idx]
         return rv
@@ -152,8 +157,13 @@ class Tiles:
         self._erase = False
         self._area.queue_draw()
 
-    def clip(self, pos: ImagePos):
-        return np.clip(pos, [0, 0], self._view.img_shape)
+    def clip(self, pos: ImagePos) -> ImagePos:
+        return clip_by_rect(
+            pos,
+            *MultiPoint([
+                (0, 0), (np.array(np.flip(self._view.img_shape)))
+            ]).bounds
+        )
 
     def pen_down(self, pos: WidgetPos):
         self._begin = self.clip(self.w2i(pos))
@@ -167,8 +177,8 @@ class Tiles:
             return
         a = self._begin
         b = self.clip(self.w2i(pos))
-        if not np.all(np.isclose(a, b)):
-            self._tiles.append(Tile(a, b))
+        if not a.equals(b):
+            self._tiles.append(box(*MultiPoint([a, b]).bounds))
         self._cursor = None
         self._begin = None
         self.queue_draw()

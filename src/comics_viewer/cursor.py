@@ -6,9 +6,10 @@ import numpy as np
 from contextlib import contextmanager
 from collections import defaultdict
 import cv2
+from shapely.geometry import MultiPoint
 
 from .gi_helpers import Gdk, Gtk, Rsvg, GdkPixbuf
-from .utils import RESOURCE_BASE_DIR, Rect
+from .utils import RESOURCE_BASE_DIR
 
 
 class CursorIcon(Enum):
@@ -88,5 +89,7 @@ class Cursor:
                 height=img.shape[0],
                 rowstride=img.shape[1] * 4)
             return Gdk.Cursor.new_from_pixbuf(
-                self.gdk_display, pixbuf, *Rect(np.zeros(2), rect).br
+                self.gdk_display,
+                pixbuf,
+                *MultiPoint([np.zeros(2), rect]).bounds[2:]
             )
