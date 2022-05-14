@@ -23,6 +23,8 @@ from .utils import imdecode, RESOURCE_BASE_DIR, wrap_add_action
 from .thumb import Thumb
 from .view_gestures import ViewGestures
 from .tiles import Tiles
+from .cursor import Cursor
+from .view_timer import ViewTimer
 
 
 Status = namedtuple("Status", [
@@ -133,6 +135,8 @@ class View:
         self._img_shape: Optional[npt.NDArray] = None
         self._encoded_size: Optional[int] = None
         self._page_changed = False
+        self._timer = ViewTimer(self)
+        self._cursor = Cursor(builder, self)
 
         self._stack = ExitStack()
         self._tex_stack = ExitStack()
@@ -175,6 +179,14 @@ class View:
     @property
     def app(self):
         return self._app
+
+    @property
+    def cursor(self) -> Cursor:
+        return self._cursor
+
+    @property
+    def timer(self) -> ViewTimer:
+        return self._timer
 
     @property
     def tiles(self) -> Tiles:
@@ -474,5 +486,9 @@ class View:
     def _key_press(self, widget: Gtk.GLArea, event: Gdk.EventKey):
         return event.keyval in (Gdk.KEY_Right, Gdk.KEY_Left)
 
-    def rotate(self, p: npt.NDArray):
-        return np.dot(cat(p, 0), self.m_rotation)[:2]
+    def rotate(self, p: npt.NDArray, angle: Optional[float] = None):
+        if angle is None:
+            m_rotation = self.m_rotation
+        else:
+            m_rotation = axangle2mat([0, 0, 1.0], angle)
+        return np.dot(cat(p, 0), m_rotation)[:2]

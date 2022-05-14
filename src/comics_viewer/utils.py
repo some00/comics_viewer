@@ -5,6 +5,7 @@ import cv2
 from difflib import SequenceMatcher
 from enum import IntEnum
 import numpy.typing as npt
+from dataclasses import dataclass
 
 from .gi_helpers import Gio, Gtk, GdkPixbuf
 
@@ -129,3 +130,20 @@ def is_in(widget: Gtk.Widget, x: int, y: int):
         return np.flip(pos).astype(np.float64)
     else:
         return None
+
+
+@dataclass(init=False)
+class Rect:
+    tl: npt.NDArray
+    br: npt.NDArray
+
+    def __init__(self, a, b):
+        self.tl = np.array([min(a[0], b[0]), min(a[1], b[1])])
+        self.br = np.array([max(a[0], b[0]), max(a[1], b[1])])
+
+    def contains(self, pos: npt.NDArray):
+        return np.all(self.tl <= pos) and np.all(pos <= self.br)
+
+    @property
+    def area(self):
+        return np.abs((self.br - self.tl).prod())

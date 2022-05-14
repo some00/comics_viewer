@@ -6,6 +6,7 @@ from enum import Enum
 
 from .utils import is_in
 from .gi_helpers import Gtk, Gdk
+from .cursor import Cursor, CursorIcon
 
 # ERASER 1 and PEN 1 works on touching the display
 # PEN 2 need proximity only
@@ -18,6 +19,38 @@ DragData = namedtuple("DragData", [
     "start_widget",
     "start_img",
 ])
+name_idx = 0
+
+
+def event_source_type() -> Optional[Gdk.InputSource]:
+    event = Gtk.get_current_event()
+    source_device = event.get_source_device()
+    if source_device is None:
+        return None
+    return source_device.get_source()
+
+
+def is_touch_event(cls) -> bool:
+    source = event_source_type()
+    if source is None:
+        return False
+    return source == Gdk.InputSource.TOUCHSCREEN
+
+
+def dec_event_handler(func):
+    def wrapper(self, *args, _func=func, **kwargs):
+        source = event_source_type()
+        if source is None or source not in [
+            Gdk.InputSource.PEN, Gdk.InputSource.ERASER,
+            Gdk.InputSource.TOUCHSCREEN,
+        ]:
+            self._view.timer.cursor()
+        if source is None or source not in [
+            Gdk.InputSource.PEN, Gdk.InputSource.ERASER,
+        ]:
+            return False
+        return _func(self, *args, **kwargs)
+    return wrapper
 
 
 class Direction(Enum):
@@ -36,6 +69,7 @@ class ViewGestures:
     def __init__(self, view, builder: Gtk.Builder):
         self._view = view
         event_box = builder.get_object("view_event_box")
+        self.window = builder.get_object("window")
 
         self._zoom = Gtk.GestureZoom.new(event_box)
         self._zoom.connect("begin", self.zoom_begin)
@@ -57,6 +91,18 @@ class ViewGestures:
         event_box.connect("button-press-event", self.button_press)
         event_box.connect("button-release-event", self.button_release)
         event_box.connect("leave-notify-event", self.leave_notify_event)
+
+        def disable_timer(*x):
+            self._view.timer.enabled = False
+            self._view.cursor.set_cursor(CursorIcon.DEFAULT)
+        event_box.connect(
+            "leave-notify-event",
+            lambda *x: self._view.cursor.set_cursor(CursorIcon.DEFAULT)
+        )
+
+        def enable_timer(*x):
+            self._view.timer.enabled = True
+        event_box.connect("enter-notify-event", enable_timer)
 
     def zoom_begin(self, gesture: Gtk.GestureZoom,
                    sequence: Optional[Gdk.EventSequence]):
@@ -136,52 +182,36 @@ class ViewGestures:
         elif direction == Direction.right:
             self._view.page_idx -= 1
 
-    @staticmethod
-    def event_source_type() -> Optional[Gdk.InputSource]:
-        event = Gtk.get_current_event()
-        source_device = event.get_source_device()
-        if source_device is None:
-            return None
-        return source_device.get_source()
-
-    @classmethod
-    def pen_event(cls) -> bool:
-        source = cls.event_source_type()
-        if source is None:
-            return False
-        return source in [
-            Gdk.InputSource.PEN, Gdk.InputSource.ERASER,
-        ]
-
     @property
     def tiles(self):
         return self._view.tiles
 
+    @property
+    def cursor(self) -> Cursor:
+        return self._view.cursor
+
+    @dec_event_handler
     def motion_notify(self, event_box: Gtk.EventBox,
                       event: Gdk.EventMotion) -> bool:
-        if not self.pen_event():
-            return False
         pos = is_in(event_box, event.x, event.y)
         if pos is None:
             return False
         self.tiles.pen_motion(pos)
         return True
 
+    @dec_event_handler
     def leave_notify_event(self, event_box: Gtk.EventBox,
                            event: Gdk.EventCrossing):
-        if not self.pen_event():
-            return False
         self.tiles.pen_left()
         return False
 
+    @dec_event_handler
     def button_press(self, event_box: Gtk.EventBox,
                      event: Gdk.EventButton) -> bool:
-        if not self.pen_event():
-            return False
         pos = is_in(event_box, event.x, event.y)
         if pos is None:
             return False
-        source = self.event_source_type()
+        source = event_source_type()
         if source == Gdk.InputSource.PEN:
             if event.button == 1:
                 self.tiles.pen_down(pos)
@@ -189,19 +219,26 @@ class ViewGestures:
             self.tiles.eraser_down(pos)
         return True
 
+    @dec_event_handler
     def button_release(self, event_box: Gtk.EventBox,
                        event: Gdk.EventButton) -> bool:
-        if not self.pen_event():
-            return False
         pos = is_in(event_box, event.x, event.y)
         if pos is None:
             return False
-        source = self.event_source_type()
+        source = event_source_type()
         if source == Gdk.InputSource.PEN:
             if event.button == 1:
                 self.tiles.pen_up(pos)
             elif event.button == 2:
-                pass
+                # TODO
+                global name_idx
+                if (name_idx % 3) == 1:
+                    self.cursor.set_cursor(CursorIcon.PEN_RECTANGLE)
+                elif (name_idx % 3) == 2:
+                    self.cursor.set_cursor(CursorIcon.PEN_POINT)
+                else:
+                    self.cursor.set_cursor(CursorIcon.DEFAULT)
+                name_idx += 1
         elif source == Gdk.InputSource.ERASER:
             self.tiles.eraser_up(pos)
         return True

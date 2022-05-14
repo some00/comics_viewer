@@ -3,10 +3,11 @@ import numpy as np
 import numpy.typing as npt
 import cairo
 from dataclasses import dataclass, field
-from time import time
 from contextlib import contextmanager
 
-from .gi_helpers import Gtk, GLib
+from .gi_helpers import Gtk
+from .utils import Rect as Tile
+from .cursor import CursorIcon
 
 
 WidgetPos = NewType("WidgetPos", npt.NDArray)
@@ -48,23 +49,6 @@ class Colors:
     ])
 
 
-@dataclass(init=False)
-class Tile:
-    tl: ImagePos
-    br: ImagePos
-
-    def __init__(self, a, b):
-        self.tl = np.array([min(a[0], b[0]), min(a[1], b[1])])
-        self.br = np.array([max(a[0], b[0]), max(a[1], b[1])])
-
-    def contains(self, pos: ImagePos):
-        return np.all(self.tl <= pos) and np.all(pos <= self.br)
-
-    @property
-    def area(self):
-        return np.abs((self.br - self.tl).prod())
-
-
 class Tiles:
     def __init__(self, view, builder: Gtk.Builder):
         self._area: Gtk.DrawingArea = builder.get_object("view_drawing")
@@ -80,8 +64,6 @@ class Tiles:
         self._last_activity: Optional[float] = None
 
         self._colors = Colors()
-
-        self._inactivity_timer: Optional[GLib.Source] = None
 
     def w2i(self, pos: WidgetPos) -> ImagePos:
         return self._view.widget_to_img(pos)
@@ -147,39 +129,20 @@ class Tiles:
                 rv = [idx]
         return rv
 
-    def _start_timer(self, restart=False):
-        if not restart:
-            self._last_activity = time()
-        if self._inactivity_timer is None or restart:
-            return  # TODO disabled for now
-            self._inactivity_timer = GLib.timeout_source_new_seconds(1)
-            self._inactivity_timer.set_callback(self._on_inactivity_timeout)
-            self._inactivity_timer.attach()
-
-    def _on_inactivity_timeout(self, arg):
-        if self._last_activity - time() > 8:
-            self._show_tiles = False
-            self._area.queue_draw()
-        else:
-            self._start_timer(restart=True)
-
     def queue_draw(self):
         self._show_tiles = True
-        self._start_timer()
+        if self._erase:
+            self._view.timer.tile(CursorIcon.PEN_ERASE)
+        else:
+            self._view.timer.tile(CursorIcon.PEN_RECTANGLE)
         self._area.queue_draw()
 
     def hide_tiles(self, *args):
-        if self._inactivity_timer is not None:
-            self._inactivity_timer.destroy()
-            self._inactivity_timer = None
         if self._show_tiles:
             self._show_tiles = False
             self._area.queue_draw()
 
     def reset(self):
-        if self._inactivity_timer is not None:
-            self._inactivity_timer.destroy()
-            self._inactivity_timer = None
         self._cursor = None
         self._tiles = []
         self._motion_timeout = None
@@ -226,7 +189,6 @@ class Tiles:
 
     def pen_motion(self, pos: WidgetPos):
         self._cursor = self.w2i(pos)
-        self._start_timer()
         self.queue_draw()
 
     def pen_left(self):

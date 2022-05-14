@@ -7,6 +7,7 @@ from .library import Library
 from .view import View
 from .manage import Manage
 from .utils import RESOURCE_BASE_DIR
+from .cursor import CursorIcon
 
 
 class StackName(Enum):
@@ -117,11 +118,17 @@ class App(Gtk.Application):
     def visible_child_changed(self, stack, param):
         name = stack.get_visible_child_name()
         if name == StackName.manage.value:
+            self.disable_view()
             self._manage.refresh()
         elif name == StackName.view.value:
             self.area.grab_focus()
             self.area.queue_render()
         elif name == StackName.library.value:
+            self.disable_view()
             self._library.refresh_models()
         else:
             raise RuntimeError("unknown stack child")
+
+    def disable_view(self):
+        self._view.timer.enabled = False
+        self._view.cursor.set_cursor(CursorIcon.DEFAULT)

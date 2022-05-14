@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 32.000006 32.000265"
+   version="1.1"
+   id="svg842"
+   sodipodi:docname="pen-erase.svg"
+   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04, custom)"
+   width="8.4666681mm"
+   height="8.4667368mm"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs846">
+    <marker
+       style="overflow:visible;"
+       id="Arrow1Lend"
+       refX="0.0"
+       refY="0.0"
+       orient="auto"
+       inkscape:stockid="Arrow1Lend"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.8) rotate(180) translate(12.5,0)"
+         style="fill-rule:evenodd;fill:context-stroke;stroke:context-stroke;stroke-width:1.0pt;"
+         d="M 0.0,0.0 L 5.0,-5.0 L -12.5,0.0 L 5.0,5.0 L 0.0,0.0 z "
+         id="path1105" />
+    </marker>
+    <linearGradient
+       id="linearGradient1000"
+       inkscape:swatch="solid">
+      <stop
+         style="stop-color:#000000;stop-opacity:1;"
+         offset="0"
+         id="stop998" />
+    </linearGradient>
+  </defs>
+  <sodipodi:namedview
+     id="namedview844"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="12"
+     inkscape:cx="26.416667"
+     inkscape:cy="15.416667"
+     inkscape:window-width="1914"
+     inkscape:window-height="1040"
+     inkscape:window-x="0"
+     inkscape:window-y="34"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg842"
+     units="mm"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0"
+     inkscape:document-units="mm" />
+  <!--! Font Awesome Pro 6.1.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2022 Fonticons, Inc. -->
+  <path
+     style="display:inline;fill:#ff0000;stroke:#000000;stroke-width:0.74376;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;fill-opacity:1"
+     d="M 13.800849,5.8551378 28.049328,20.108299 c 0.635711,0.635646 1.106381,1.424094 1.356998,2.285883 l 2.163861,7.354557 c 0.152816,0.514629 0.01222,1.071432 -0.42177,1.450986 -0.323967,0.379567 -0.880214,0.521475 -1.399786,0.37002 L 22.39517,29.406467 C 21.533293,29.152209 20.744766,28.685864 20.109056,28.049605 L 5.8569098,13.800725 Z"
+     id="path3510" />
+  <path
+     style="display:inline;fill:#ff0000;stroke:#000000;stroke-width:0.74376;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;fill-opacity:1"
+     d="m 1.5157389,9.4612119 c -1.5280288,-1.5279978 -1.5280288,-4.0094654 0,-5.5374627 l 2.4101996,-2.408124 c 1.5275395,-1.52799723 4.0068115,-1.52799723 5.5349623,0 L 12.419401,4.4738283 4.4742389,12.419415 Z"
+     id="path840" />
+</svg>
