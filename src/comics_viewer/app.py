@@ -35,6 +35,10 @@ class App(Gtk.Application):
         self.window = builder.get_object("window")
         self.add_window(self.window)
         self.stack = builder.get_object("stack")
+        self.statusbar = builder.get_object("statusbar")
+        self.thumb_scrolled_window = builder.get_object(
+            "thumb_scrolled_window")
+        self.switcher = builder.get_object("switcher")
         builder.get_object("stack").connect("notify::visible-child-name",
                                             self.visible_child_changed)
 
@@ -43,6 +47,7 @@ class App(Gtk.Application):
                                              app=self)
         self._view = self._stack.enter_context(
             self._create_view(builder=builder,
+                              app=self,
                               add_action=self.add_action,
                               library=self._library)
         )
@@ -88,19 +93,22 @@ class App(Gtk.Application):
     def set_fullscreen(self, action, value):
         if self.window:
             if value.get_boolean():
+                self.statusbar.hide()
+                self.thumb_scrolled_window.hide()
+                self.switcher.hide()
                 self.window.fullscreen()
-                # TODO doesn't run on set_state
-                # self._view.status_bar.bar.hide()
-                # TODO task switcher
             else:
-                # TODO doesn't run on set_state
-                # self._view.status_bar.bar.show()
-                # TODO task switcher
+                self.statusbar.show()
+                self.thumb_scrolled_window.show()
+                self.switcher.show()
                 self.window.unfullscreen()
         self.fs.set_state(GLib.Variant.new_boolean(self.fullscreen))
 
     def configure_event(self, widget, event):
-        self.fs.set_state(GLib.Variant.new_boolean(self.fullscreen))
+        self.change_fullscreen(self.fullscreen)
+
+    def change_fullscreen(self, fs: bool):
+        self.fs.change_state(GLib.Variant.new_boolean(fs))
 
     def view_comics(self, *args, **kwargs):
         if self._view.load(*args, **kwargs):

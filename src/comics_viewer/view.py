@@ -22,6 +22,7 @@ from .cover_cache import CoverCache
 from .utils import imdecode, RESOURCE_BASE_DIR, wrap_add_action
 from .thumb import Thumb
 from .view_gestures import ViewGestures
+from .tiles import Tiles
 
 
 Status = namedtuple("Status", [
@@ -104,6 +105,7 @@ class View:
     def __init__(
         self,
         builder: Gtk.Builder,
+        app,
         library: Library,
         add_action,
         thumb_cache: CoverCache,
@@ -111,6 +113,7 @@ class View:
     ):
         self._thumb = Thumb(view=self, builder=builder,
                             thumb_cache=thumb_cache, library=library.path)
+        self._app = app
         self._library = library
         self._area = builder.get_object("view")
         self._window = builder.get_object("window")
@@ -159,6 +162,7 @@ class View:
             prev_page=add_action("prev-page", self.prev_page),
         )
         self._gestures = ViewGestures(self, builder)
+        self._tiles = Tiles(self, builder)
         self.set_actions(False)
 
     def __enter__(self):
@@ -167,6 +171,14 @@ class View:
     def __exit__(self, *args):
         self._stack.pop_all().close()
         self._tex_stack.pop_all().close()
+
+    @property
+    def app(self):
+        return self._app
+
+    @property
+    def tiles(self) -> Tiles:
+        return self._tiles
 
     @property
     def page_number(self) -> int:
@@ -207,6 +219,8 @@ class View:
 
     @page_idx.setter
     def page_idx(self, page_idx):
+        if page_idx >= len(self.archive) or page_idx < 0:
+            return
         self._page_idx = page_idx
         self._status.progress.set_label(
             f"{self.page_number}/{len(self.archive)} "
@@ -227,6 +241,7 @@ class View:
         self.position = np.zeros(2)
         self._area.queue_render()
         self._thumb.scroll_to(page_idx)
+        self._tiles.reset()  # TODO save
         self.set_actions(True)
 
     @property
@@ -255,7 +270,7 @@ class View:
 
     @scale.setter
     def scale(self, scale: float):
-        self._scale = np.clip(scale, 0.5, 4.0)
+        self._scale = np.clip(scale, 1.0, 4.0)
         self._area.queue_render()
 
     @property
@@ -264,6 +279,20 @@ class View:
 
     @position.setter
     def position(self, position: npt.NDArray):
+        if self.img_shape is not None and self.viewport is not None:
+            affine = self.affine(np.zeros(2))
+            vp = np.abs(
+                self.widget_to_img(self.viewport, affine)
+                -
+                self.widget_to_img(np.zeros(2), affine)
+            ) * np.flip(self.keep_aspect)
+            shape = self.img_shape.astype(np.float64)
+            position = np.clip(
+                position,
+                vp / 2 - shape / 2,
+                shape - vp / 2 - shape / 2
+            )
+
         self._position = position
         self._area.queue_render()
 
@@ -278,13 +307,16 @@ class View:
         }
         return aspects[min(aspects.keys())]
 
+    @property
     def m_rotation(self):
         angle = self.angle
         return axangle2mat([0, 0, 1.0], angle)
 
+    @property
     def m_zoom(self):
-        return self.keep_aspect() * self.scale
+        return self.keep_aspect * self.scale
 
+    @property
     def m_translate(self):
         # temp var
         p = self.position.copy()
@@ -293,53 +325,45 @@ class View:
         # scale by the user selected zoom level
         p *= self.scale
         # normalize
-        p /= (self.img_shape / np.flip(self.keep_aspect()))
+        p /= (self.img_shape / np.flip(self.keep_aspect))
         # scale to vertex coords [0, 1]
         p *= 2.0
         # invert y
         p *= [-1.0, 1.0]
         # rotate by current image rotation
-        p = np.dot(cat(p, 0.0), self.m_rotation())[:2]
+        p = np.dot(cat(p, 0.0), self.m_rotation)[:2]
         # flip for (x, y)
         p = np.flip(p)
         return p
 
+    @property
     def keep_aspect(self):
         if self.img_shape is None:
             return np.array([1.0, 1.0])
-        vp = np.abs(np.dot(cat(self.viewport, 0), self.m_rotation()))[:2]
+        vp = np.abs(np.dot(cat(self.viewport, 0), self.m_rotation))[:2]
         rv = vp / self.img_shape
         rv /= max(rv)
         return rv
 
     def widget_to_img(self, pos: npt.NDArray, affine=None):
-        if affine is None:
-            affine = self.affine()
-        device = np.flip(
-            (pos - self.viewport / 2.0) / self.viewport * 2.0 * [-1.0, 1.0]
-        )
-        world = np.dot(cat(device, 0.0, 1.0), np.linalg.inv(affine))[:2]
-        img = (world - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * np.flip(
-            self.img_shape)
-        return np.flip(img[:2])
+        return self._transform_position(pos=pos, inverse=True, affine=affine)
 
-    def offset_to_img(self, offset: npt.NDArray, affine=None):
+    def img_to_widget(self, pos: npt.NDArray, affine=None):
+        return self._transform_position(pos=pos, inverse=False, affine=affine)
+
+    def _transform_position(self, pos: npt.NDArray,
+                            inverse: bool, affine=None) -> npt.NDArray:
         if affine is None:
             affine = self.affine()
-        device = np.flip(
-            offset / self.viewport * 2 * [-1.0, 1.0]
-        )
-        world = np.dot(cat(device, 0.0, 1.0), np.linalg.inv(affine))[:2]
-        img = (world - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * np.flip(
-            self.img_shape)
-        img = np.flip(world / 2.0 * [1.0, -1.0] * np.flip(self.img_shape)[:2])
-        return img
-        return dict(
-            device=device,
-            world=world,
-            img=img,
-        )
-        return np.flip(img[:2])
+        if inverse:
+            affine = np.linalg.inv(affine)
+            src, dst = self.viewport, self.img_shape
+        else:
+            src, dst = self.img_shape, self.viewport
+        ndc = np.dot(cat(np.flip((pos - src / 2.0) / src * 2.0 * [-1.0, 1.0]),
+                         0.0, 1.0), affine)[:2]
+        return np.flip(((ndc - [-1.0, 1.0]) /
+                        2.0 * [1.0, -1.0] * np.flip(dst))[:2])
 
     def load(self, base: Path, comics: Comics, page_idx: int) -> bool:
         path = base / comics.path
@@ -390,10 +414,12 @@ class View:
         OGL.glFlush()
         return True
 
-    def affine(self):
-        return affine_compose(Z=cat(self.m_zoom(), 1),
-                              T=cat(self.m_translate(), 0),
-                              R=self.m_rotation()).T.astype(np.float64)
+    def affine(self, translate: Optional[npt.NDArray] = None):
+        if translate is None:
+            translate = self.m_translate
+        return affine_compose(Z=cat(self.m_zoom, 1),
+                              T=cat(translate, 0),
+                              R=self.m_rotation).T.astype(np.float64)
 
     def _realize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
         area.make_current()
@@ -447,3 +473,6 @@ class View:
 
     def _key_press(self, widget: Gtk.GLArea, event: Gdk.EventKey):
         return event.keyval in (Gdk.KEY_Right, Gdk.KEY_Left)
+
+    def rotate(self, p: npt.NDArray):
+        return np.dot(cat(p, 0), self.m_rotation)[:2]
