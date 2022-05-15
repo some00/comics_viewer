@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import os
 from collections import namedtuple
 from pathlib import Path
@@ -13,6 +13,9 @@ from transforms3d.affines import compose as affine_compose
 from transforms3d.axangles import axangle2mat
 from datetime import datetime
 import humanize
+from shapely.geometry import MultiPolygon
+import shapely.wkt as wkt
+import json
 
 from .library import Comics, Progress, Library
 from .gi_helpers import Gtk, Gdk
@@ -56,16 +59,20 @@ def cat(x, *v):
 def _vertex_arrays(size):
     vao = OGL.glGenVertexArrays(size)
     OGL.glBindVertexArray(vao)
-    yield vao
-    OGL.glDeleteVertexArrays(vao, size)
+    try:
+        yield vao
+    finally:
+        OGL.glDeleteVertexArrays(vao, size)
 
 
 @contextmanager
 def _vbo(vertex_data):
     rv = vbo.VBO(vertex_data, usage=OGL.GL_STATIC_DRAW,
                  target=OGL.GL_ARRAY_BUFFER)
-    yield rv
-    rv.delete()
+    try:
+        yield rv
+    finally:
+        rv.delete()
 
 
 @contextmanager
@@ -77,8 +84,10 @@ def _compile_and_link_shaders(fragment_code, vertex_code):
         stack.callback(OGL.glDeleteShader, vertex)
         rv = shaders.compileProgram(vertex, fragment, validate=True)
         stack.pop_all()
-    yield rv
-    OGL.glDeleteProgram(rv)
+    try:
+        yield rv
+    finally:
+        OGL.glDeleteProgram(rv)
 
 
 @contextmanager
@@ -101,6 +110,21 @@ def _load_texture(img: npt.NDArray):
         yield texture
     finally:
         OGL.glDeleteTextures(1, texture)
+
+
+@contextmanager
+def tile_models(archive: Archive):
+    path = archive.path.with_suffix(".cwt")
+    try:
+        with path.open("r") as f:
+            rv = [wkt.loads(t) for t in json.load(f)]
+    except IOError:
+        rv = [MultiPolygon()] * len(archive)
+    try:
+        yield rv
+    finally:
+        with path.open("w") as f:
+            json.dump([wkt.dumps(t) for t in rv], f)
 
 
 class View:
@@ -139,7 +163,7 @@ class View:
         self._cursor = Cursor(builder, self)
 
         self._stack = ExitStack()
-        self._tex_stack = ExitStack()
+        self._tex_stack = self._stack.enter_context(ExitStack())
         self._texture = None
         self._vao = None
         self._vbo = None
@@ -167,14 +191,17 @@ class View:
         )
         self._gestures = ViewGestures(self, builder)
         self._tiles = Tiles(self, builder)
+        self._tile_stack = self._stack.enter_context(ExitStack())
+        self._tile_models: List[MultiPolygon] = []
         self.set_actions(False)
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
+        if self._page_idx is not None and self._tiles.dirty:
+            self._tile_models[self._page_idx] = self._tiles.tiles
         self._stack.pop_all().close()
-        self._tex_stack.pop_all().close()
 
     @property
     def app(self):
@@ -216,6 +243,9 @@ class View:
             comics = self.archive.path.name
         self._status.comics.set_label(comics)
         self._window.set_title(comics)
+        self._tile_stack.pop_all().close()
+        self._tile_models = self._tile_stack.enter_context(
+            tile_models(self._archive))
 
     @property
     def page_idx(self) -> int:
@@ -233,6 +263,8 @@ class View:
     def page_idx(self, page_idx):
         if page_idx >= len(self.archive) or page_idx < 0:
             return
+        if self._page_idx is not None and self._tiles.dirty:
+            self._tile_models[self._page_idx] = self._tiles.tiles
         self._page_idx = page_idx
         self._status.progress.set_label(
             f"{self.page_number}/{len(self.archive)} "
@@ -253,7 +285,7 @@ class View:
         self.position = np.zeros(2)
         self._area.queue_render()
         self._thumb.scroll_to(page_idx)
-        self._tiles.reset()  # TODO save
+        self._tiles.tiles = self._tile_models[page_idx]
         self.set_actions(True)
 
     @property
@@ -462,7 +494,6 @@ class View:
 
     def _unrealize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
         area.make_current()
-        self._tex_stack.pop_all().close()
         self._stack.pop_all().close()
 
     def next_page(self):

@@ -19,7 +19,6 @@ DragData = namedtuple("DragData", [
     "start_widget",
     "start_img",
 ])
-name_idx = 0
 
 
 def event_source_type() -> Optional[Gdk.InputSource]:
@@ -230,15 +229,7 @@ class ViewGestures:
             if event.button == 1:
                 self.tiles.pen_up(pos)
             elif event.button == 2:
-                # TODO
-                global name_idx
-                if (name_idx % 3) == 1:
-                    self.cursor.set_cursor(CursorIcon.PEN_RECTANGLE)
-                elif (name_idx % 3) == 2:
-                    self.cursor.set_cursor(CursorIcon.PEN_POINT)
-                else:
-                    self.cursor.set_cursor(CursorIcon.DEFAULT)
-                name_idx += 1
+                self.tiles.toggle_mode()
         elif source == Gdk.InputSource.ERASER:
             self.tiles.eraser_up(pos)
         return True
