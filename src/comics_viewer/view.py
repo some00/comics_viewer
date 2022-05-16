@@ -103,7 +103,7 @@ def _load_texture(img: npt.NDArray):
     OGL.glTexParameteri(
         OGL.GL_TEXTURE_2D, OGL.GL_TEXTURE_MAG_FILTER, OGL.GL_LINEAR)
     h, w, image = img.shape[0], img.shape[1], img.tobytes()
-    OGL.glTexImage2D(OGL.GL_TEXTURE_2D, 0, OGL.GL_RGBA, w, h, 0, OGL.GL_BGR,
+    OGL.glTexImage2D(OGL.GL_TEXTURE_2D, 0, OGL.GL_RGBA, w, h, 0, OGL.GL_RGB,
                      OGL.GL_UNSIGNED_BYTE, image)
     OGL.glGenerateMipmap(OGL.GL_TEXTURE_2D)
     try:

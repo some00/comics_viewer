@@ -38,7 +38,7 @@ class CoverCache:
 
         self._idle_source: Optional[GLib.Source] = None
         self._lru: Dict[Path, Stamp] = {}
-        self._size: Optional[int] = None
+        self._size = 0
         self._to_process: Iterable[Union[ToCache, Path]] = []
 
         lru = self._base / LRU_INFO
@@ -84,8 +84,7 @@ class CoverCache:
         if self._idle_source is not None:
             self._idle_source.destroy()
         gen = (ToCache(library=library, comics=c, page_idx=i) for c, i in data)
-        if self._size is None:
-            self._size = 0
+        if self._size == 0:
             self._to_process = chain(dfs_gen(self._base), gen)
             cache_msg("calc size")
         else:
@@ -129,7 +128,7 @@ class CoverCache:
     def cleanup(self):
         cache_msg("cleanup")
         cleanorder = sorted(list(self._lru.items()), key=itemgetter(1))
-        while self._size is not None and self._size > self._max_size:
+        while self._size > self._max_size:
             try:
                 p, s = cleanorder.pop(0)
                 p = self._base / p

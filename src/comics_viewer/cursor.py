@@ -5,7 +5,6 @@ import cairo
 import numpy as np
 from contextlib import contextmanager
 from collections import defaultdict
-import cv2
 from shapely.geometry import MultiPoint
 
 from .gi_helpers import Gdk, Gtk, Rsvg, GdkPixbuf
@@ -79,7 +78,7 @@ class Cursor:
                 vp.y, vp.x = 0, 0
                 vp.height, vp.width = rect[1], rect[0]
                 handle.render_document(cr, vp)
-            img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+            img = img[..., [2, 1, 0, 3]].copy()  # BGRA2RGBA
             pixbuf = GdkPixbuf.Pixbuf.new_from_data(
                 data=img.tobytes(),
                 colorspace=GdkPixbuf.Colorspace.RGB,

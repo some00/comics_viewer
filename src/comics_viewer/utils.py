@@ -1,10 +1,11 @@
 from typing import List, Any
 from pathlib import Path
 import numpy as np
-import cv2
 from difflib import SequenceMatcher
 from enum import IntEnum
 import numpy.typing as npt
+from PIL import Image
+from io import BytesIO
 
 from .gi_helpers import Gio, Gtk, GdkPixbuf
 
@@ -16,19 +17,27 @@ def scale_to_fit(dst, src):
     src_shape = np.array(src.shape[:2]).astype(float)
     scale = np.min(dst / src_shape)
     new_shape = (src_shape.astype(float) * scale).astype(int)
-    return cv2.resize(src, np.flip(new_shape))
+    with Image.frombuffer(
+        "RGB", (src.shape[1], src.shape[0]), src.tobytes()
+    ) as im:
+        return np.frombuffer(
+            im.resize(np.flip(new_shape)).tobytes(), dtype=np.uint8
+        ).reshape(new_shape[0], new_shape[1], 3)
 
 
 def imdecode(buf: bytes) -> npt.NDArray:
-    return cv2.imdecode(np.frombuffer(buf, dtype=np.uint8), cv2.IMREAD_COLOR)
+    with Image.open(BytesIO(buf), formats=None) as im:
+        return np.frombuffer(im.convert("RGB").tobytes(),
+                             dtype=np.uint8).reshape((im.height, im.width, 3))
 
 
 def imencode(img: npt.NDArray) -> bytes:
-    ok, rv = cv2.imencode(".png", img, [
-        cv2.IMWRITE_PNG_COMPRESSION, 9,
-    ])
-    assert(ok)
-    return rv
+    with Image.frombuffer(
+        "RGB", (img.shape[1], img.shape[0]), img.tobytes()
+    ) as im:
+        rv = BytesIO()
+        im.save(rv, format="PNG")
+        return rv.getvalue()
 
 
 class Opcode(IntEnum):
@@ -112,7 +121,7 @@ def dfs_gen(path: Path, base=None):
 
 def np_to_pixbuf(arr: npt.NDArray) -> GdkPixbuf.Pixbuf:
     return GdkPixbuf.Pixbuf.new_from_data(
-        data=cv2.cvtColor(arr, cv2.COLOR_BGR2RGB).tobytes(),
+        data=arr.tobytes(),
         colorspace=GdkPixbuf.Colorspace.RGB,
         has_alpha=False,
         bits_per_sample=8,
