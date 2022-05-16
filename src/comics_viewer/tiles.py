@@ -1,11 +1,13 @@
-from typing import List, Optional, NewType, Union, Tuple, Callable
+from typing import List, Optional, NewType, Union, Tuple, Callable, Dict
 import numpy as np
 import numpy.typing as npt
 import cairo
 from dataclasses import dataclass, field
 from contextlib import contextmanager
-from shapely.geometry import MultiPoint, box, Polygon, Point, MultiPolygon
 from enum import Enum
+from shapely.geometry import MultiPoint, box, Polygon, Point, MultiPolygon
+from shapely.strtree import STRtree
+from shapely.ops import nearest_points
 
 from .gi_helpers import Gtk
 from .cursor import CursorIcon
@@ -13,7 +15,7 @@ from .cursor import CursorIcon
 
 WidgetPos = NewType("WidgetPos", npt.NDArray)
 ImagePos = NewType("ImagePos", Point)
-EPSILON = 20
+EPSILON = 20  # TODO everything is in image coordinates
 
 
 def html(s: str):
@@ -38,8 +40,12 @@ def save(cr: cairo.Context):
 
 class State(Enum):
     RECTANGLE = CursorIcon.PEN_RECTANGLE
-    POINT = CursorIcon.PEN_POINT
+    POINT = CursorIcon.NONE
     ERASE = CursorIcon.PEN_ERASE
+
+
+def isclose(a: Point, b: Point):
+    return np.isclose(a.x, b.x, atol=3) and np.isclose(a.y, b.y, atol=3)
 
 
 @dataclass
@@ -76,7 +82,10 @@ class Tiles:
         self._state = State.RECTANGLE
         self._restore: Optional[State] = None
         self._rect_begin: Optional[ImagePos] = None
-        self._points: List[Point] = []
+        self._points: List[Polygon] = []
+        self._tree: STRtree = STRtree([])
+        self._line_tree: STRtree = STRtree([])
+        self._tree_indices: Dict[int, int] = {}
 
         # start operation
         self._area.connect("draw", self._draw)
@@ -89,6 +98,8 @@ class Tiles:
     def tiles(self, tiles: MultiPolygon):
         self.reset()
         self._tiles = list(tiles.geoms)
+        self._tiles_changed()
+        self._dirty = False
 
     @property
     def dirty(self) -> bool:
@@ -164,7 +175,7 @@ class Tiles:
             begin: Optional[WidgetPos] = None
             cursor_on_begin: bool = (
                 self._cursor and self._points and
-                self.snap(self._cursor) == self._points[0]
+                isclose(self.snap(self._cursor), self._points[0])
             )
             # pending points
             if self._points:
@@ -193,34 +204,60 @@ class Tiles:
                         cr.move_to(*t(self._points[-1]))
                         cr.line_to(*t(self._cursor))
                         cr.stroke()
-                    cr.arc(*t(self._cursor), 8, 0, np.pi * 2)
+                    cr.arc(*t(self.snap(self._cursor)), 8, 0, np.pi * 2)
                     cr.stroke()
 
     def to_be_erased(self) -> List[int]:
-        rv = []
         if (
             not self._state == State.ERASE or
             self._cursor is None or
             self._rect_begin is None
         ):
-            return rv
+            return []
         selection = box(*MultiPoint([self._rect_begin, self._cursor]).bounds)
-        for idx, tile in enumerate(self._tiles):
+        inside = []
+        outside = None
+        for tile in self._tree.query(selection):
             if selection.contains(tile):
-                rv.append(idx)
-        if rv:
-            return rv
-        for idx, tile in enumerate(self._tiles):
-            if tile.contains(selection) and (
-                not rv or self._tiles[rv[0]].area > tile.area
+                inside.append(self._tree_indices[id(tile)])
+                continue
+            if (
+                not inside and
+                tile.contains(selection) and
+                (outside is None or self._tiles[outside].area > tile.area)
             ):
-                rv = [idx]
-        return rv
+                outside = self._tree_indices[id(tile)]
+        if inside:
+            return inside
+        if outside is not None:
+            return [outside]
+        return []
 
     def snap(self, pos: ImagePos):
-        ref = self._rect_begin or (self._points and self._points[0])
-        if ref and pos.distance(ref) < EPSILON / self._view.scale:
-            return ref
+        cands = []
+        distances = []
+
+        def append_point(p: Point):
+            cands.append(p)
+            distances.append(p.distance(pos))
+        if self._rect_begin:
+            append_point(self._rect_begin)
+        if self._points:
+            append_point(self._points[0])
+        if self._view.img_shape is not None:
+            img = box(*MultiPoint([
+                Point(0, 0), np.flip(self._view.img_shape)]
+            ).bounds).exterior
+            append_point(nearest_points(img, pos)[0])
+        if self._tiles:
+            tile = self._line_tree.nearest(pos)
+            tile_point = nearest_points(tile, pos)[0]
+            append_point(tile_point)
+        if cands:
+            min_idx = np.argmin(distances)
+            distance = distances[min_idx]
+            if distance < EPSILON / self._view.scale:
+                return cands[min_idx]
         return pos
 
     def queue_draw(self):
@@ -236,11 +273,15 @@ class Tiles:
     def reset(self):
         self._cursor = None
         self._tiles = []
+        self._tree = STRtree([])
+        self._line_tree = STRtree([])
+        self._tree_indices = {}
         self._dirty = False
         self._motion_timeout = None
         self._tile_timeout = None
         self._show_tiles = False
-        self._state = State.RECTANGLE
+        if self._state == State.ERASE:
+            self._state = State.RECTANGLE
         self._points = []
         self._restore = None
         self._area.queue_draw()
@@ -250,6 +291,12 @@ class Tiles:
                                for a in (pos.coords,
                                          (0, 0),
                                          np.flip(self._view.img_shape)))))
+
+    def _tiles_changed(self):
+        self._dirty = True
+        self._tree_indices = {id(p): idx for idx, p in enumerate(self._tiles)}
+        self._tree = STRtree(self._tiles)
+        self._line_tree = STRtree([tile.exterior for tile in self._tiles])
 
     def _change_state(self, state: State):
         if state == State.ERASE:
@@ -274,10 +321,10 @@ class Tiles:
             self._rect_begin = self.clip(self._cursor)
         elif self._state == State.POINT:
             pos = self.snap(self.clip(self.w2i(pos)))
-            if self._points and pos == self._points[0]:
+            if self._points and isclose(pos, self._points[0]):
                 if len(self._points) > 2:
                     self._tiles.append(Polygon(self._points))
-                    self._dirty = True
+                    self._tiles_changed()
                     self._points = []
             else:
                 self._points.append(pos)
@@ -288,10 +335,10 @@ class Tiles:
         if self._state == State.RECTANGLE:
             if self._rect_begin is None:
                 return
-            if self._rect_begin != pos:
+            if not isclose(self._rect_begin, pos):
                 self._tiles.append(box(*MultiPoint([self._rect_begin,
                                                     pos]).bounds))
-                self._dirty = True
+                self._tiles_changed()
         self._cursor = None
         self._rect_begin = None
         self.queue_draw()
@@ -305,9 +352,10 @@ class Tiles:
     def eraser_up(self, pos: WidgetPos):
         self._cursor = self.w2i(pos)
         erase_indices = self.to_be_erased()
-        self._dirty = self._dirty or bool(erase_indices)
         self._tiles = [t for idx, t in enumerate(self._tiles)
                        if idx not in erase_indices]
+        if erase_indices:
+            self._tiles_changed()
         self._change_state(self._restore)
         self.queue_draw()
 
