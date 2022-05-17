@@ -4,7 +4,7 @@ import numpy.typing as npt
 import cairo
 from dataclasses import dataclass, field
 from contextlib import contextmanager
-from enum import Enum
+from enum import IntEnum
 from shapely.geometry import MultiPoint, box, Polygon, Point, MultiPolygon
 from shapely.strtree import STRtree
 from shapely.ops import nearest_points
@@ -16,6 +16,7 @@ from .cursor import CursorIcon
 WidgetPos = NewType("WidgetPos", npt.NDArray)
 ImagePos = NewType("ImagePos", Point)
 EPSILON = 20  # TODO everything is in image coordinates
+RECTANGLE_CURSOR_SIZE = 20  # the first in widget coorditanes
 
 
 def html(s: str):
@@ -38,10 +39,17 @@ def save(cr: cairo.Context):
         cr.restore()
 
 
-class State(Enum):
-    RECTANGLE = CursorIcon.PEN_RECTANGLE
-    POINT = CursorIcon.NONE
-    ERASE = CursorIcon.PEN_ERASE
+class State(IntEnum):
+    RECTANGLE = 0
+    POINT = 1
+    ERASE = 2
+
+
+STATE_TO_ICON = {
+    State.RECTANGLE: CursorIcon.NONE,
+    State.POINT: CursorIcon.NONE,
+    State.ERASE: CursorIcon.PEN_ERASE,
+}
 
 
 def isclose(a: Point, b: Point):
@@ -224,10 +232,6 @@ class Tiles:
         c_orig = self._cursor
         c_snapped = self.snap(self._cursor) if self._cursor else None
         c_widget = t(c_snapped) if self._cursor else None
-        cursor_on_begin: bool = (
-            c_orig and self._points and
-            isclose(c_snapped, self._points[0])
-        )
 
         # set styling current operation
         if self._state == State.ERASE:
@@ -246,37 +250,55 @@ class Tiles:
             cr.rectangle(*b, *(e - b))
             cr.stroke()
         elif self._state == State.POINT:
-            begin: Optional[WidgetPos] = None
-            # pending points
-            if self._points:
-                begin = self._cache.points[0]
-                end = self._cache._points[-1]
-                cr.arc(*begin, 8, 0, np.pi * 2)
-                if cursor_on_begin:
-                    cr.fill()
-                else:
-                    cr.stroke()
-                cr.move_to(*begin)
-            for point in self._cache.points[1:]:
-                cr.line_to(*point)
-                cr.stroke()
-                cr.arc(*point, 8, 0, np.pi * 2)
+            self._draw_state_point(cr, c_orig, c_snapped, c_widget)
+
+        if self._state == State.RECTANGLE and c_orig:
+            cr.set_dash([5, 2])
+            cr.rectangle(
+                *(c_widget - [np.sqrt(RECTANGLE_CURSOR_SIZE * 4)] * 2),
+                RECTANGLE_CURSOR_SIZE, RECTANGLE_CURSOR_SIZE)
+            cr.stroke()
+
+    def _draw_state_point(self,
+                          cr: cairo.Context,
+                          c_orig: ImagePos,
+                          c_snapped: ImagePos,
+                          c_widget: WidgetPos):
+        cursor_on_begin: bool = (
+            c_orig and self._points and
+            isclose(c_snapped, self._points[0])
+        )
+        begin: Optional[WidgetPos] = None
+        # pending points
+        if self._points:
+            begin = self._cache.points[0]
+            end = self._cache._points[-1]
+            cr.arc(*begin, 8, 0, np.pi * 2)
+            if cursor_on_begin:
                 cr.fill()
-                cr.move_to(*point)
-            # cursor
-            if c_orig:
-                if cursor_on_begin and len(self._points) > 1:
+            else:
+                cr.stroke()
+            cr.move_to(*begin)
+        for point in self._cache.points[1:]:
+            cr.line_to(*point)
+            cr.stroke()
+            cr.arc(*point, 8, 0, np.pi * 2)
+            cr.fill()
+            cr.move_to(*point)
+        # cursor
+        if c_orig:
+            if cursor_on_begin and len(self._points) > 1:
+                cr.move_to(*end)
+                cr.line_to(*begin)
+                cr.stroke()
+            if not cursor_on_begin:
+                cr.new_sub_path()
+                if self._points:
                     cr.move_to(*end)
-                    cr.line_to(*begin)
+                    cr.line_to(*c_widget)
                     cr.stroke()
-                if not cursor_on_begin:
-                    cr.new_sub_path()
-                    if self._points:
-                        cr.move_to(*end)
-                        cr.line_to(*c_widget)
-                        cr.stroke()
-                    cr.arc(*c_widget, 8, 0, np.pi * 2)
-                    cr.stroke()
+                cr.arc(*c_widget, 8, 0, np.pi * 2)
+                cr.stroke()
 
     def to_be_erased(self) -> List[int]:
         if (
@@ -333,7 +355,7 @@ class Tiles:
 
     def queue_draw(self):
         self._show_tiles = True
-        self._view.timer.tile(self._state.value)
+        self._view.timer.tile(STATE_TO_ICON[self._state])
         self._area.queue_draw()
 
     def hide_tiles(self, *args):
