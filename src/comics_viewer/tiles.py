@@ -59,7 +59,6 @@ def isclose(a: Point, b: Point):
 @dataclass
 class Colors:
     erase = html("#ff0000")
-    normal = html("#ff00ff")
     pending = html("#00ff00")
     tile: List[npt.NDArray] = field(default_factory=lambda: [
         html(c) for c in [
@@ -148,6 +147,8 @@ class Tiles:
         # display related
         self._show_tiles = False
         self._cursor: Optional[ImagePos] = None
+        self._pen_down = False
+        self._snap = True
 
         # state and related variables
         self._state = State.RECTANGLE
@@ -254,7 +255,8 @@ class Tiles:
             self._draw_state_point(cr, c_orig, c_snapped, c_widget)
 
         if self._state == State.RECTANGLE and c_orig:
-            cr.set_dash([5, 2])
+            if self._snap:
+                cr.set_dash([5, 2])
             cr.rectangle(
                 *(c_widget - [np.sqrt(RECTANGLE_CURSOR_SIZE * 4)] * 2),
                 RECTANGLE_CURSOR_SIZE, RECTANGLE_CURSOR_SIZE)
@@ -298,6 +300,8 @@ class Tiles:
                     cr.move_to(*end)
                     cr.line_to(*c_widget)
                     cr.stroke()
+                if self._snap:
+                    cr.set_dash([5, 2])
                 cr.arc(*c_widget, 8, 0, np.pi * 2)
                 cr.stroke()
 
@@ -328,6 +332,8 @@ class Tiles:
         return []
 
     def snap(self, pos: ImagePos):
+        if not self._snap:
+            return pos
         cands = []
         distances = []
 
@@ -410,10 +416,15 @@ class Tiles:
         def toggle(state):
             return State.RECTANGLE if state == State.POINT else State.POINT
         if self._state == State.ERASE:
-            return
-        self._change_state(toggle(self._state))
+            pass
+        elif self._pen_down:
+            self._snap = not self._snap
+            self.queue_draw()
+        else:
+            self._change_state(toggle(self._state))
 
     def pen_down(self, pos: WidgetPos):
+        self._pen_down = True
         self._cursor = self.w2i(pos)
         if self._state == State.RECTANGLE:
             self._rect_begin = self.clip(self._cursor)
@@ -432,6 +443,7 @@ class Tiles:
         self.queue_draw()
 
     def pen_up(self, pos: WidgetPos):
+        self._pen_down = False
         pos = self.snap(self.clip(self.w2i(pos)))
         if self._state == State.RECTANGLE:
             if self._rect_begin is None:
