@@ -143,10 +143,11 @@ class Tiles:
                     *self._colors.tile[idx % len(self._colors.tile)])
                 cr.set_line_width(2)
             # contour
-            cr.move_to(*t(tile.exterior.coords[0]))
+            first = t(tile.exterior.coords[0])
+            cr.move_to(*first)
             for p in tile.exterior.coords[1:]:
                 cr.line_to(*t(p))
-            cr.line_to(*t(tile.exterior.coords[0]))
+            cr.line_to(*first)
             cr.stroke()
             # label
             cr.move_to(*t(tile.representative_point()))
@@ -180,6 +181,7 @@ class Tiles:
             # pending points
             if self._points:
                 begin = t(self._points[0])
+                end = t(self._points[-1])
                 cr.arc(*begin, 8, 0, np.pi * 2)
                 if cursor_on_begin:
                     cr.fill()
@@ -195,13 +197,13 @@ class Tiles:
             # cursor
             if self._cursor:
                 if cursor_on_begin and len(self._points) > 1:
-                    cr.move_to(*t(self._points[-1]))
-                    cr.line_to(*t(self._points[0]))
+                    cr.move_to(*end)
+                    cr.line_to(*begin)
                     cr.stroke()
                 if not cursor_on_begin:
                     cr.new_sub_path()
                     if self._points:
-                        cr.move_to(*t(self._points[-1]))
+                        cr.move_to(*end)
                         cr.line_to(*t(self._cursor))
                         cr.stroke()
                     cr.arc(*t(self.snap(self._cursor)), 8, 0, np.pi * 2)
