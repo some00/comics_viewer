@@ -3,7 +3,7 @@ from pathlib import Path
 
 from .gi_helpers import Gtk, Gio, GObject, GLib
 from .cover_cache import CoverCache
-from .utils import refresh_gio_model, np_to_pixbuf, RESOURCE_BASE_DIR
+from .utils import refresh_gio_model, image_to_pixbuf, RESOURCE_BASE_DIR
 from .archive import Archive
 
 
@@ -88,7 +88,7 @@ class Thumb:
         img = self._cache.cover(
             self._library,
             self.archive.path.relative_to(self._library), page_idx)
-        widget.set_from_pixbuf(np_to_pixbuf(img))
+        widget.set_from_pixbuf(image_to_pixbuf(img))
         self._idle = None
         return GLib.SOURCE_CONTINUE
 

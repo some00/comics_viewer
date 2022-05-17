@@ -19,7 +19,7 @@ from .cover_cache import CoverCache
 from .gi_helpers import Gio, Gtk, GObject, GLib
 from .utils import (
     wrap_add_action, refresh_gtk_model, refresh_gio_model, RESOURCE_BASE_DIR,
-    np_to_pixbuf,
+    image_to_pixbuf,
 )
 
 
@@ -249,7 +249,7 @@ class Library:
         builder.get_object("label").set_label(label)
         if pages:
             builder.get_object("image").set_from_pixbuf(
-                np_to_pixbuf(self._cover_cache.cover(
+                image_to_pixbuf(self._cover_cache.cover(
                     self._library, Path(path),
                     0 if cover_idx is None else cover_idx
                 )))

@@ -8,14 +8,15 @@ from time import time
 from collections import namedtuple
 from itertools import chain
 from operator import itemgetter
+from PIL.Image import Image
 
-from .utils import scale_to_fit, imdecode, dfs_gen, imencode
+from .utils import imdecode, dfs_gen, imencode
 from .archive import Archive
 from .in_mem_cache import InMemCache
 from .gi_helpers import GLib
 
 
-LRU_INFO = "lru.pickle"
+LRU_INFO = Path("lru.pickle")
 Stamp = NewType("Stamp", int)
 ToCache = namedtuple("ToCache", ["library", "comics", "page_idx"])
 
@@ -53,7 +54,7 @@ class CoverCache:
     def __exit__(self, *args):
         self.save()
 
-    def cover(self, library: Path, comics: Path, idx: int) -> npt.NDArray:
+    def cover(self, library: Path, comics: Path, idx: int) -> Image:
         k, p = self.key(library, comics, idx)
         self._lru[p.relative_to(self._base)] = time()
         in_mem = self._in_mem.get(k)
@@ -68,9 +69,11 @@ class CoverCache:
                 return imdecode(in_mem)
         else:
             page = Archive(library / comics).read(idx)
-            thumb = scale_to_fit(self._max_shape, imdecode(page))
+            thumb = imdecode(page)
+            thumb.thumbnail(self._max_shape)
             p.parent.mkdir(exist_ok=True, parents=True)
             with p.open("wb") as f:
+                # TODO just use PIL save
                 in_mem = imencode(thumb)
                 self._in_mem.store(k, in_mem)
                 f.write(in_mem)
@@ -112,17 +115,20 @@ class CoverCache:
                 self._size += abs_p.stat().st_size
                 cache_msg("entry size", self._size)
             else:
-                cache_msg("rm orphan")
+                cache_msg("rm orphan", rel_p)
                 abs_p.unlink()
         elif isinstance(v, ToCache):
             k, p = self.key(v.library, v.comics, v.page_idx)
             if not p.exists():
                 page = Archive(v.library / v.comics).read(v.page_idx)
-                thumb = scale_to_fit(self._max_shape, imdecode(page))
+                thumb = imdecode(page)
+                thumb.thumbnail(self._max_shape)
                 p.parent.mkdir(exist_ok=True, parents=True)
                 with p.open("wb") as f:
+                    # TODO just use PIL save
                     f.write(imencode(thumb))
                     cache_msg("new file entry", p)
+                self._lru[p.relative_to(self._base)] = 0
         return GLib.SOURCE_CONTINUE
 
     def cleanup(self):

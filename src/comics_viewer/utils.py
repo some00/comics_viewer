@@ -1,43 +1,34 @@
-from typing import List, Any
+from typing import List, Any, NewType
 from pathlib import Path
+from collections import namedtuple
 import numpy as np
 from difflib import SequenceMatcher
 from enum import IntEnum
-import numpy.typing as npt
-from PIL import Image
+from PIL import Image as image
+from PIL.Image import Image
 from io import BytesIO
 
 from .gi_helpers import Gio, Gtk, GdkPixbuf
 
 
 RESOURCE_BASE_DIR = Path(__file__).parent
+Coord = namedtuple("Coord", ["x", "y"])
+ImgSize = NewType("ImgSize", Coord)
 
 
-def scale_to_fit(dst, src):
-    src_shape = np.array(src.shape[:2]).astype(float)
-    scale = np.min(dst / src_shape)
-    new_shape = (src_shape.astype(float) * scale).astype(int)
-    with Image.frombuffer(
-        "RGB", (src.shape[1], src.shape[0]), src.tobytes()
-    ) as im:
-        return np.frombuffer(
-            im.resize(np.flip(new_shape)).tobytes(), dtype=np.uint8
-        ).reshape(new_shape[0], new_shape[1], 3)
+def image_shape(img: Image) -> ImgSize:
+    return Coord(*img.size)
 
 
-def imdecode(buf: bytes) -> npt.NDArray:
-    with Image.open(BytesIO(buf), formats=None) as im:
-        return np.frombuffer(im.convert("RGB").tobytes(),
-                             dtype=np.uint8).reshape((im.height, im.width, 3))
+def imdecode(buf: bytes) -> Image:
+    with image.open(BytesIO(buf), formats=None) as im:
+        return im.convert("RGB")
 
 
-def imencode(img: npt.NDArray) -> bytes:
-    with Image.frombuffer(
-        "RGB", (img.shape[1], img.shape[0]), img.tobytes()
-    ) as im:
-        rv = BytesIO()
-        im.save(rv, format="PNG")
-        return rv.getvalue()
+def imencode(img: Image) -> bytes:
+    rv = BytesIO()
+    img.save(rv, format="PNG")
+    return rv.getvalue()
 
 
 class Opcode(IntEnum):
@@ -119,15 +110,16 @@ def dfs_gen(path: Path, base=None):
             yield child.relative_to(base)
 
 
-def np_to_pixbuf(arr: npt.NDArray) -> GdkPixbuf.Pixbuf:
+def image_to_pixbuf(img: Image) -> GdkPixbuf.Pixbuf:
+    assert(img.mode == "RGB")
     return GdkPixbuf.Pixbuf.new_from_data(
-        data=arr.tobytes(),
+        data=img.tobytes(),
         colorspace=GdkPixbuf.Colorspace.RGB,
         has_alpha=False,
         bits_per_sample=8,
-        width=arr.shape[1],
-        height=arr.shape[0],
-        rowstride=arr.shape[1] * 3)
+        width=img.width,
+        height=img.height,
+        rowstride=img.width * 3)
 
 
 def is_in(widget: Gtk.Widget, x: int, y: int):

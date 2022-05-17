@@ -16,6 +16,7 @@ import humanize
 from shapely.geometry import MultiPolygon
 import shapely.wkt as wkt
 import json
+from PIL.Image import Image
 
 from .library import Comics, Progress, Library
 from .gi_helpers import Gtk, Gdk
@@ -91,7 +92,7 @@ def _compile_and_link_shaders(fragment_code, vertex_code):
 
 
 @contextmanager
-def _load_texture(img: npt.NDArray):
+def _load_texture(img: Image):
     texture = OGL.glGenTextures(1)
     OGL.glBindTexture(OGL.GL_TEXTURE_2D, texture)
     OGL.glTexParameteri(
@@ -102,7 +103,7 @@ def _load_texture(img: npt.NDArray):
                         OGL.GL_LINEAR_MIPMAP_LINEAR)
     OGL.glTexParameteri(
         OGL.GL_TEXTURE_2D, OGL.GL_TEXTURE_MAG_FILTER, OGL.GL_LINEAR)
-    h, w, image = img.shape[0], img.shape[1], img.tobytes()
+    h, w, image = img.height, img.width, img.tobytes()
     OGL.glTexImage2D(OGL.GL_TEXTURE_2D, 0, OGL.GL_RGBA, w, h, 0, OGL.GL_RGB,
                      OGL.GL_UNSIGNED_BYTE, image)
     OGL.glGenerateMipmap(OGL.GL_TEXTURE_2D)
@@ -446,11 +447,13 @@ class View:
             encoded = self.archive.read(self.page_idx)
             self._in_mem.store(key, encoded)
         self.encoded_size = len(encoded)
-        decoded = imdecode(encoded)
+        image = imdecode(encoded)
         self._tex_stack.pop_all().close()
         self._area.make_current()
-        self._texture = self._tex_stack.enter_context(_load_texture(decoded))
-        self.img_shape = decoded.shape[:2]
+        self._texture = self._tex_stack.enter_context(_load_texture(image))
+        # TODO this is the part where (y, x) is introduced to the system
+        # kill it with fire
+        self.img_shape = (image.height, image.width)
         self._area.queue_render()
 
     def _render(self, area: Gtk.GLArea, context: Gdk.GLContext):
