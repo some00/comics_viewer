@@ -77,6 +77,7 @@ class App(Gtk.Application):
         self.set_accels_for_action("app.save-manage", ["<Control>s"])
         self.set_accels_for_action("app.prev-page", ["Left"])
         self.set_accels_for_action("app.next-page", ["Right", "space"])
+        self.set_accels_for_action("app.edit-with-mouse", ["m"])
 
         self._library.start_refresh()
 

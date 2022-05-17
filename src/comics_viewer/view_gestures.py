@@ -29,13 +29,6 @@ def event_source_type() -> Optional[Gdk.InputSource]:
     return source_device.get_source()
 
 
-def is_touch_event(cls) -> bool:
-    source = event_source_type()
-    if source is None:
-        return False
-    return source == Gdk.InputSource.TOUCHSCREEN
-
-
 def dec_event_handler(func):
     def wrapper(self, *args, _func=func, **kwargs):
         source = event_source_type()
@@ -44,9 +37,11 @@ def dec_event_handler(func):
             Gdk.InputSource.TOUCHSCREEN,
         ]:
             self._view.timer.cursor()
-        if source is None or source not in [
-            Gdk.InputSource.PEN, Gdk.InputSource.ERASER,
-        ]:
+        filter_in = [Gdk.InputSource.PEN, Gdk.InputSource.ERASER]
+        if self.edit_with_mouse:
+            filter_in.append(Gdk.InputSource.MOUSE)
+
+        if source is None or source not in filter_in:
             return False
         return _func(self, *args, **kwargs)
     return wrapper
@@ -91,6 +86,8 @@ class ViewGestures:
         event_box.connect("button-release-event", self.button_release)
         event_box.connect("leave-notify-event", self.leave_notify_event)
 
+        self._edit_with_mouse = False
+
         def disable_timer(*x):
             self._view.timer.enabled = False
             self._view.cursor.set_cursor(CursorIcon.DEFAULT)
@@ -102,6 +99,14 @@ class ViewGestures:
         def enable_timer(*x):
             self._view.timer.enabled = True
         event_box.connect("enter-notify-event", enable_timer)
+
+    @property
+    def edit_with_mouse(self) -> bool:
+        return self._edit_with_mouse
+
+    @edit_with_mouse.setter
+    def edit_with_mouse(self, edit_with_mouse):
+        self._edit_with_mouse = edit_with_mouse
 
     def zoom_begin(self, gesture: Gtk.GestureZoom,
                    sequence: Optional[Gdk.EventSequence]):
@@ -216,6 +221,11 @@ class ViewGestures:
                 self.tiles.pen_down(pos)
         elif source == Gdk.InputSource.ERASER:
             self.tiles.eraser_down(pos)
+        elif source == Gdk.InputSource.MOUSE:
+            if event.button == 1:
+                self.tiles.pen_down(pos)
+            elif event.button == 3:
+                self.tiles.eraser_down(pos)
         return True
 
     @dec_event_handler
@@ -232,4 +242,11 @@ class ViewGestures:
                 self.tiles.toggle_mode()
         elif source == Gdk.InputSource.ERASER:
             self.tiles.eraser_up(pos)
+        elif source == Gdk.InputSource.MOUSE:
+            if event.button == 1:
+                self.tiles.pen_up(pos)
+            elif event.button == 2:
+                self.tiles.toggle_mode()
+            elif event.button == 3:
+                self.tiles.eraser_up(pos)
         return True

@@ -35,7 +35,7 @@ Status = namedtuple("Status", [
     "img_shape", "encoded_size",
 ])
 Actions = namedtuple("Actions", [
-    "next_page", "prev_page",
+    "next_page", "prev_page", "edit_with_mouse",
 ])
 
 VERTEX_DATA = np.array([
@@ -189,6 +189,8 @@ class View:
         self._actions = Actions(
             next_page=add_action("next-page", self.next_page),
             prev_page=add_action("prev-page", self.prev_page),
+            edit_with_mouse=add_action("edit-with-mouse",
+                                       self.edit_with_mouse),
         )
         self._gestures = ViewGestures(self, builder)
         self._tiles = Tiles(self, builder)
@@ -514,6 +516,9 @@ class View:
         area.make_current()
         self._stack.pop_all().close()
 
+    def edit_with_mouse(self):
+        self._gestures.edit_with_mouse = not self._gestures.edit_with_mouse
+
     def next_page(self):
         self.page_idx += 1
 
@@ -531,6 +536,7 @@ class View:
             self.archive and
             self.page_idx
         )
+        self._actions.edit_with_mouse.set_enabled(enable)
 
     def _key_press(self, widget: Gtk.GLArea, event: Gdk.EventKey):
         return event.keyval in (Gdk.KEY_Right, Gdk.KEY_Left)
