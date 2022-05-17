@@ -1,0 +1,9 @@
+git+https://gitlab.gnome.org/GNOME/pygobject.git
+Pillow
+git+https://github.com/shapely/shapely.git
+humanize
+SQLAlchemy
+rarfile
+PyOpenGL
+numpy
+transforms3d
