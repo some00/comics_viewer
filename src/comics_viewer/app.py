@@ -63,6 +63,15 @@ class App(Gtk.Application):
         quit = Gio.SimpleAction.new("quit", None)
         quit.connect("activate", lambda *x: self.quit())
         self.add_action(quit)
+        if True:
+            import cProfile
+            self._pr_enabled = False
+            self._pr = cProfile.Profile()
+            profiler = Gio.SimpleAction.new("toggle-profiler", None)
+            profiler.connect("activate", lambda *x: self.toggle_profiler())
+            self.profiler = profiler
+            self.add_action(profiler)
+            self.set_accels_for_action("app.toggle-profiler", ["p"])
 
         self.fs = Gio.SimpleAction.new_stateful(
             "fullscreen", None, GLib.Variant.new_boolean(self.fullscreen))
@@ -133,3 +142,14 @@ class App(Gtk.Application):
     def disable_view(self):
         self._view.timer.enabled = False
         self._view.cursor.set_cursor(CursorIcon.DEFAULT)
+
+    def toggle_profiler(self):
+        self._pr_enabled = not self._pr_enabled
+        if self._pr_enabled:
+            print("profiler started")
+            self._pr.enable()
+        else:
+            self._pr.disable()
+            import pstats
+            ps = pstats.Stats(self._pr).sort_stats("tottime")
+            ps.print_stats()
