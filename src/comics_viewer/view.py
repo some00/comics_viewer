@@ -232,6 +232,10 @@ class View:
     def archive(self) -> Archive:
         return self._archive
 
+    def _affine_changed(self):
+        self._affine = None
+        self._tiles.transformation_changed()
+
     @archive.setter
     def archive(self, path: Path):
         if self._archive and self._archive.path == path:
@@ -259,7 +263,7 @@ class View:
     @viewport.setter
     def viewport(self, viewport: npt.NDArray):
         self._viewport = viewport
-        self._affine = None
+        self._affine_changed()
 
     @page_idx.setter
     def page_idx(self, page_idx):
@@ -297,7 +301,7 @@ class View:
     @img_shape.setter
     def img_shape(self, img_shape: Tuple[int, int]):
         self._img_shape = np.array(img_shape)
-        self._affine = None
+        self._affine_changed()
         self._status.img_shape.set_label(
             "x".join(map(str, np.flip(self._img_shape))))
 
@@ -318,7 +322,7 @@ class View:
     @scale.setter
     def scale(self, scale: float):
         self._scale = np.clip(scale, 1.0, 4.0)
-        self._affine = None
+        self._affine_changed()
         self._area.queue_render()
 
     @property
@@ -342,7 +346,7 @@ class View:
             )
 
         self._position = position
-        self._affine = None
+        self._affine_changed()
         self._area.queue_render()
 
     @property

@@ -63,6 +63,69 @@ class Colors:
     ])
 
 
+class WidgetPosCache:
+    def __init__(self, transform: Callable,
+                 tiles, rect_begin, points):
+        self._t = transform
+
+        self._tiles_orig: List[Polygon] = tiles
+        self._tiles: Optional[List[List[WidgetPos]]] = None
+        self._representative_points: Optional[List[WidgetPos]] = None
+
+        self._rect_begin_orig: ImagePos = rect_begin
+        self._rect_begin: Optional[WidgetPos] = None
+
+        self._points_orig: List[ImagePos] = points
+        self._points: Optional[List[WidgetPos]] = None
+
+    def invalidate(self):
+        self._tiles = None
+        self._representative_points = None
+        self._rect_begin = None
+        self._points = None
+
+    @property
+    def tiles(self) -> List[List[WidgetPos]]:
+        if self._tiles is None:
+            self._tiles = [[self._t(p) for p in t.exterior.coords]
+                           for t in self._tiles_orig]
+        return self._tiles
+
+    @tiles.setter
+    def tiles(self, tiles: List[Polygon]):
+        self._tiles_orig = tiles
+        self._tiles = None
+        self._representative_points = None
+
+    def representative_point(self, idx):
+        if self._representative_points is None:
+            self._representative_points = [
+                self._t(t.representative_point()) for t in self._tiles_orig]
+        return self._representative_points[idx]
+
+    @property
+    def rect_begin(self) -> WidgetPos:
+        if self._rect_begin is None:
+            self._rect_begin = self._t(self._rect_begin_orig)
+        return self._rect_begin
+
+    @rect_begin.setter
+    def rect_begin(self, rect_begin: ImagePos):
+        self._rect_begin_orig = rect_begin
+        self._rect_begin = None
+
+    @property
+    def points(self) -> List[WidgetPos]:
+        if self._points is None:
+            self._points = [self._t(p) for p in self._points_orig]
+        return self._points
+
+    @points.setter
+    def points(self, points: List[ImagePos]):
+        self._points_orig = points
+        self._points = None
+
+
 class Tiles:
     def __init__(self, view, builder: Gtk.Builder):
         # contants members
@@ -86,7 +149,10 @@ class Tiles:
         self._tree: STRtree = STRtree([])
         self._line_tree: STRtree = STRtree([])
         self._tree_indices: Dict[int, int] = {}
-
+        self._cache = WidgetPosCache(self.transform,
+                                     self._tiles,
+                                     self._rect_begin,
+                                     self._points)
         # start operation
         self._area.connect("draw", self._draw)
 
@@ -112,26 +178,26 @@ class Tiles:
         return self._view.img_to_widget(np.flip(
             np.array(pos.coords).reshape(2)))
 
+    # translate from image to widget
+    def transform(self, p: Union[Tuple[float, float], ImagePos]) -> WidgetPos:
+        if isinstance(p, tuple):
+            p = Point(*p)
+        return np.flip(self.i2w(p))
+
     def _draw(self, area: Gtk.DrawingArea, cr: cairo.Context):
         if not self._show_tiles:  # no display
             return
-
-        # translate from image to widget
-        def t(p: Union[Tuple[float, float], ImagePos]) -> WidgetPos:
-            if isinstance(p, tuple):
-                p = Point(*p)
-            return np.flip(self.i2w(p))
 
         cr.select_font_face("monospace", cairo.FontSlant.NORMAL,
                             cairo.FontWeight.BOLD)
         cr.set_font_size(30)
         with save(cr):
-            self._draw_tiles(cr, t)
+            self._draw_tiles(cr)
         cr.new_sub_path()
         with save(cr):
-            self._draw_state(cr, t)
+            self._draw_state(cr, self.transform)
 
-    def _draw_tiles(self, cr: cairo.Context, t: Callable):
+    def _draw_tiles(self, cr: cairo.Context):
         erase_indices = self.to_be_erased()
         # display tiles
         for idx, tile in enumerate(self._tiles):
@@ -143,19 +209,26 @@ class Tiles:
                     *self._colors.tile[idx % len(self._colors.tile)])
                 cr.set_line_width(2)
             # contour
-            first = t(tile.exterior.coords[0])
-            cr.move_to(*first)
-            for p in tile.exterior.coords[1:]:
-                cr.line_to(*t(p))
-            cr.line_to(*first)
+            cr.move_to(*self._cache.tiles[idx][0])
+            for p in self._cache.tiles[idx][1:]:
+                cr.line_to(*p)
+            cr.line_to(*self._cache.tiles[idx][0])
             cr.stroke()
             # label
-            cr.move_to(*t(tile.representative_point()))
+            cr.move_to(*self._cache.representative_point(idx))
             with save(cr):
                 cr.rotate(-self._view.angle)
                 cr.show_text(f"{idx + 1}")
 
     def _draw_state(self, cr: cairo.Context, t: Callable):
+        c_orig = self._cursor
+        c_snapped = self.snap(self._cursor) if self._cursor else None
+        c_widget = t(c_snapped) if self._cursor else None
+        cursor_on_begin: bool = (
+            c_orig and self._points and
+            isclose(c_snapped, self._points[0])
+        )
+
         # set styling current operation
         if self._state == State.ERASE:
             cr.set_source_rgba(*self._colors.erase)
@@ -167,35 +240,31 @@ class Tiles:
         if (
             self._state in [State.ERASE, State.RECTANGLE] and
             self._rect_begin is not None and
-            self._cursor is not None
+            c_orig is not None
         ):
-            b, e = t(self._rect_begin), t(self._cursor)
+            b, e = self._cache.rect_begin, c_widget
             cr.rectangle(*b, *(e - b))
             cr.stroke()
         elif self._state == State.POINT:
             begin: Optional[WidgetPos] = None
-            cursor_on_begin: bool = (
-                self._cursor and self._points and
-                isclose(self.snap(self._cursor), self._points[0])
-            )
             # pending points
             if self._points:
-                begin = t(self._points[0])
-                end = t(self._points[-1])
+                begin = self._cache.points[0]
+                end = self._cache._points[-1]
                 cr.arc(*begin, 8, 0, np.pi * 2)
                 if cursor_on_begin:
                     cr.fill()
                 else:
                     cr.stroke()
                 cr.move_to(*begin)
-            for point in map(t, self._points[1:]):
+            for point in self._cache.points[1:]:
                 cr.line_to(*point)
                 cr.stroke()
                 cr.arc(*point, 8, 0, np.pi * 2)
                 cr.fill()
                 cr.move_to(*point)
             # cursor
-            if self._cursor:
+            if c_orig:
                 if cursor_on_begin and len(self._points) > 1:
                     cr.move_to(*end)
                     cr.line_to(*begin)
@@ -204,9 +273,9 @@ class Tiles:
                     cr.new_sub_path()
                     if self._points:
                         cr.move_to(*end)
-                        cr.line_to(*t(self._cursor))
+                        cr.line_to(*c_widget)
                         cr.stroke()
-                    cr.arc(*t(self.snap(self._cursor)), 8, 0, np.pi * 2)
+                    cr.arc(*c_widget, 8, 0, np.pi * 2)
                     cr.stroke()
 
     def to_be_erased(self) -> List[int]:
@@ -285,6 +354,7 @@ class Tiles:
         if self._state == State.ERASE:
             self._state = State.RECTANGLE
         self._points = []
+        self._cache.points = self._points
         self._restore = None
         self._area.queue_draw()
 
@@ -299,6 +369,7 @@ class Tiles:
         self._tree_indices = {id(p): idx for idx, p in enumerate(self._tiles)}
         self._tree = STRtree(self._tiles)
         self._line_tree = STRtree([tile.exterior for tile in self._tiles])
+        self._cache.tiles = self._tiles
 
     def _change_state(self, state: State):
         if state == State.ERASE:
@@ -307,7 +378,9 @@ class Tiles:
         else:
             self._restore = None
         self._rect_begin = None
+        self._cache.rect_begin = None
         self._points = []
+        self._cache.points = self._points
         self._state = state
 
     def toggle_mode(self):
@@ -321,6 +394,7 @@ class Tiles:
         self._cursor = self.w2i(pos)
         if self._state == State.RECTANGLE:
             self._rect_begin = self.clip(self._cursor)
+            self._cache.rect_begin = self._rect_begin
         elif self._state == State.POINT:
             pos = self.snap(self.clip(self.w2i(pos)))
             if self._points and isclose(pos, self._points[0]):
@@ -328,8 +402,10 @@ class Tiles:
                     self._tiles.append(Polygon(self._points))
                     self._tiles_changed()
                     self._points = []
+                    self._cache.points = self._points
             else:
                 self._points.append(pos)
+                self._cache.points = self._points
         self.queue_draw()
 
     def pen_up(self, pos: WidgetPos):
@@ -343,12 +419,14 @@ class Tiles:
                 self._tiles_changed()
         self._cursor = None
         self._rect_begin = None
+        self._cache.rect_begin = None
         self.queue_draw()
 
     def eraser_down(self, pos: WidgetPos):
         self._change_state(State.ERASE)
         self._cursor = self.w2i(pos)
         self._rect_begin = self._cursor
+        self._cache.rect_begin = self._rect_begin
         self.queue_draw()
 
     def eraser_up(self, pos: WidgetPos):
@@ -367,5 +445,9 @@ class Tiles:
 
     def pen_left(self):
         self._rect_begin = None
+        self._cache.rect_begin = None
         self._cursor = None
         self.queue_draw()
+
+    def transformation_changed(self):
+        self._cache.invalidate()
