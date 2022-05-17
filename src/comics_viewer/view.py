@@ -351,14 +351,16 @@ class View:
 
     @property
     def angle(self):
-        viewport_aspect = np.divide(*self.viewport)
-        aspects = {
-            abs(np.divide(
-                *self.img_shape) - viewport_aspect): 0,
-            abs(np.divide(
-                *np.flip(self.img_shape)) - viewport_aspect): np.pi / 2
-        }
-        return aspects[min(aspects.keys())]
+        if self._affine is None:
+            viewport_aspect = np.divide(*self.viewport)
+            aspects = {
+                abs(np.divide(
+                    *self.img_shape) - viewport_aspect): 0,
+                abs(np.divide(
+                    *np.flip(self.img_shape)) - viewport_aspect): np.pi / 2
+            }
+            self._angle = aspects[min(aspects.keys())]
+        return self._angle
 
     @property
     def m_rotation(self):
