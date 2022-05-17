@@ -231,7 +231,8 @@ class Tiles:
     def _draw_state(self, cr: cairo.Context, t: Callable):
         c_orig = self._cursor
         c_snapped = self.snap(self._cursor) if self._cursor else None
-        c_widget = t(c_snapped) if self._cursor else None
+        c_widget = t(c_snapped if self._state != State.ERASE else c_orig
+                     ) if self._cursor else None
 
         # set styling current operation
         if self._state == State.ERASE:
