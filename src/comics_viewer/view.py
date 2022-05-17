@@ -172,6 +172,7 @@ class View:
         self._scale = 1.0
         self._position: npt.NDArray = np.zeros(2)
         self._viewport: Optional[npt.NDArray] = None
+        self._affine: Optional[npt.NDArray] = None
 
         self._area.set_double_buffered(
             int(os.environ.get("COMICS_VIEWER_DOUBLE_BUFFERED", 1)))
@@ -258,6 +259,7 @@ class View:
     @viewport.setter
     def viewport(self, viewport: npt.NDArray):
         self._viewport = viewport
+        self._affine = None
 
     @page_idx.setter
     def page_idx(self, page_idx):
@@ -295,6 +297,7 @@ class View:
     @img_shape.setter
     def img_shape(self, img_shape: Tuple[int, int]):
         self._img_shape = np.array(img_shape)
+        self._affine = None
         self._status.img_shape.set_label(
             "x".join(map(str, np.flip(self._img_shape))))
 
@@ -315,6 +318,7 @@ class View:
     @scale.setter
     def scale(self, scale: float):
         self._scale = np.clip(scale, 1.0, 4.0)
+        self._affine = None
         self._area.queue_render()
 
     @property
@@ -338,6 +342,7 @@ class View:
             )
 
         self._position = position
+        self._affine = None
         self._area.queue_render()
 
     @property
@@ -459,11 +464,18 @@ class View:
         return True
 
     def affine(self, translate: Optional[npt.NDArray] = None):
-        if translate is None:
+        def compose():
+            return affine_compose(
+                Z=cat(self.m_zoom, 1),
+                T=cat(translate, 0),
+                R=self.m_rotation
+            ).T.astype(np.float64)
+        if translate is not None:
+            return compose()
+        if self._affine is None:
             translate = self.m_translate
-        return affine_compose(Z=cat(self.m_zoom, 1),
-                              T=cat(translate, 0),
-                              R=self.m_rotation).T.astype(np.float64)
+            self._affine = compose()
+        return self._affine
 
     def _realize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
         area.make_current()
