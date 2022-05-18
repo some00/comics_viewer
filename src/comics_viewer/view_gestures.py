@@ -129,7 +129,7 @@ class ViewGestures:
     def drag_begin(self, gesture: Gtk.GestureDrag,
                    start_x: float, start_y: float):
         gesture_msg("drag begin")
-        start = np.array([start_y, start_x])
+        start = np.array([start_x, start_y])
         self._drag_data = DragData(
             start_pos=self._view.position,
             affine=self._view.affine(),
@@ -140,7 +140,7 @@ class ViewGestures:
     def drag_update(self, gesture: Gtk.GestureDrag,
                     offset_x: float, offset_y: float):
         gesture_msg("drag update")
-        offset = np.array([offset_y, offset_x])
+        offset = np.array([offset_x, offset_y])
         self._view.position = self._drag_data.start_pos - (
             self._view.widget_to_img(
                 self._drag_data.start_widget + offset,
@@ -154,7 +154,7 @@ class ViewGestures:
         if not np.isclose(np.linalg.norm(np.array([offset_x, offset_y])), 0):
             return
         _, start_x, start_y = gesture.get_start_point()
-        x = abs(self._view.rotate(np.array([start_y, start_x]))[1])
+        x = abs(self._view.rotate(np.array([start_x, start_y]))[1])
         w = self._view.rotate(self._view.viewport)[1]
         threshold = abs(w / 8)
         if x < threshold:

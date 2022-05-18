@@ -57,7 +57,7 @@ def cat(x, *v):
 
 
 @contextmanager
-def _vertex_arrays(size):
+def _vertex_arrays(size: int):
     vao = OGL.glGenVertexArrays(size)
     OGL.glBindVertexArray(vao)
     try:
@@ -67,7 +67,7 @@ def _vertex_arrays(size):
 
 
 @contextmanager
-def _vbo(vertex_data):
+def _vbo(vertex_data: npt.NDArray):
     rv = vbo.VBO(vertex_data, usage=OGL.GL_STATIC_DRAW,
                  target=OGL.GL_ARRAY_BUFFER)
     try:
@@ -340,7 +340,7 @@ class View:
                 self.widget_to_img(self.viewport, affine)
                 -
                 self.widget_to_img(np.zeros(2), affine)
-            ) * np.flip(self.keep_aspect)
+            ) * self.keep_aspect
             shape = self.img_shape.astype(np.float64)
             position = np.clip(
                 position,
@@ -383,15 +383,13 @@ class View:
         # scale by the user selected zoom level
         p *= self.scale
         # normalize
-        p /= (self.img_shape / np.flip(self.keep_aspect))
+        p /= (self.img_shape / self.keep_aspect)
         # scale to vertex coords [0, 1]
         p *= 2.0
         # invert y
-        p *= [-1.0, 1.0]
+        p *= [1.0, -1.0]
         # rotate by current image rotation
         p = np.dot(cat(p, 0.0), self.m_rotation)[:2]
-        # flip for (x, y)
-        p = np.flip(p)
         return p
 
     @property
@@ -401,7 +399,7 @@ class View:
         vp = np.abs(np.dot(cat(self.viewport, 0), self.m_rotation))[:2]
         rv = vp / self.img_shape
         rv /= max(rv)
-        return rv
+        return np.flip(rv)
 
     def widget_to_img(self, pos: npt.NDArray, affine=None):
         return self._transform_position(pos=pos, inverse=True, affine=affine)
@@ -418,10 +416,9 @@ class View:
             src, dst = self.viewport, self.img_shape
         else:
             src, dst = self.img_shape, self.viewport
-        ndc = np.dot(cat(np.flip((pos - src / 2.0) / src * 2.0 * [-1.0, 1.0]),
+        ndc = np.dot(cat((pos - src / 2.0) / src * 2.0 * [-1.0, 1.0],
                          0.0, 1.0), affine)[:2]
-        return np.flip(((ndc - [-1.0, 1.0]) /
-                        2.0 * [1.0, -1.0] * np.flip(dst))[:2])
+        return ((ndc - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * dst)[:2]
 
     def load(self, base: Path, comics: Comics, page_idx: int) -> bool:
         path = base / comics.path
@@ -451,9 +448,7 @@ class View:
         self._tex_stack.pop_all().close()
         self._area.make_current()
         self._texture = self._tex_stack.enter_context(_load_texture(image))
-        # TODO this is the part where (y, x) is introduced to the system
-        # kill it with fire
-        self.img_shape = (image.height, image.width)
+        self.img_shape = (image.width, image.height)
         self._area.queue_render()
 
     def _render(self, area: Gtk.GLArea, context: Gdk.GLContext):
@@ -461,7 +456,7 @@ class View:
         OGL.glClearColor(0, 0, 0, 0)
         OGL.glClear(OGL.GL_COLOR_BUFFER_BIT)
         x, y, w, h = OGL.glGetIntegeri_v(OGL.GL_VIEWPORT, 0)
-        self.viewport = np.array([h, w])
+        self.viewport = np.array([w, h])
         if self._texture is not None:
             with self._shader:
                 OGL.glUniformMatrix4fv(self._transform,

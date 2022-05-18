@@ -181,17 +181,16 @@ class Tiles:
         return self._dirty
 
     def w2i(self, pos: WidgetPos) -> ImagePos:
-        return Point(np.flip(self._view.widget_to_img(pos)))
+        return Point(self._view.widget_to_img(pos))
 
     def i2w(self, pos: ImagePos) -> WidgetPos:
-        return self._view.img_to_widget(np.flip(
-            np.array(pos.coords).reshape(2)))
+        return self._view.img_to_widget(np.array(pos.coords).reshape(2))
 
     # translate from image to widget
     def transform(self, p: Union[Tuple[float, float], ImagePos]) -> WidgetPos:
         if isinstance(p, tuple):
             p = Point(*p)
-        return np.flip(self.i2w(p))
+        return self.i2w(p)
 
     def _draw(self, area: Gtk.DrawingArea, cr: cairo.Context):
         if not self._show_tiles:  # no display
@@ -345,9 +344,8 @@ class Tiles:
         if self._points:
             append_point(self._points[0])
         if self._view.img_shape is not None:
-            img = box(*MultiPoint([
-                Point(0, 0), np.flip(self._view.img_shape)]
-            ).bounds).exterior
+            img = box(*MultiPoint([Point(0, 0), self._view.img_shape]).bounds
+                      ).exterior
             append_point(nearest_points(img, pos)[0])
         if self._tiles:
             tile = self._line_tree.nearest(pos)
@@ -390,8 +388,7 @@ class Tiles:
     def clip(self, pos: ImagePos) -> ImagePos:
         return Point(np.clip(*(np.array(a, dtype=np.float64).reshape(2)
                                for a in (pos.coords,
-                                         (0, 0),
-                                         np.flip(self._view.img_shape)))))
+                                         (0, 0), self._view.img_shape))))
 
     def _tiles_changed(self):
         self._dirty = True
