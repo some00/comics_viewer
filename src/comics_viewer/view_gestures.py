@@ -154,13 +154,13 @@ class ViewGestures:
         if not np.isclose(np.linalg.norm(np.array([offset_x, offset_y])), 0):
             return
         _, start_x, start_y = gesture.get_start_point()
-        x = abs(self._view.rotate(np.array([start_x, start_y]))[1])
-        w = self._view.rotate(self._view.viewport)[1]
-        threshold = abs(w / 8)
+        x = self._view.rotate(np.array([start_x, start_y]))[0]
+        w, h = self._view.rotate(self._view.viewport)
+        threshold = w / 6
         if x < threshold:
-            self._view.page_idx -= int(np.sign(w))
-        elif x > abs(w) - threshold:
-            self._view.page_idx += int(np.sign(w))
+            self._view.page_idx -= int(np.sign(h))
+        elif abs(w - x) < threshold:
+            self._view.page_idx += int(np.sign(h))
 
     def swipe(self, gesture: Gtk.GestureSwipe,
               velocity_x: float, velocity_y: float):
