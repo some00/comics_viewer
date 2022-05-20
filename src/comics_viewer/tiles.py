@@ -145,7 +145,6 @@ class Tiles:
         self._dirty = False
 
         # display related
-        self._show_tiles = False
         self._cursor: Optional[ImagePos] = None
         self._pen_down = False
         self._snap = True
@@ -193,9 +192,6 @@ class Tiles:
         return self.i2w(p)
 
     def _draw(self, area: Gtk.DrawingArea, cr: cairo.Context):
-        if not self._show_tiles:  # no display
-            return
-
         cr.select_font_face("monospace", cairo.FontSlant.NORMAL,
                             cairo.FontWeight.BOLD)
         cr.set_font_size(30)
@@ -359,14 +355,12 @@ class Tiles:
         return pos
 
     def queue_draw(self):
-        self._show_tiles = True
+        self._area.set_visible(True)
         self._view.timer.tile(STATE_TO_ICON[self._state])
         self._area.queue_draw()
 
     def hide_tiles(self, *args):
-        if self._show_tiles:
-            self._show_tiles = False
-            self._area.queue_draw()
+        self._area.set_visible(False)
 
     def reset(self):
         self._cursor = None
@@ -377,7 +371,6 @@ class Tiles:
         self._dirty = False
         self._motion_timeout = None
         self._tile_timeout = None
-        self._show_tiles = False
         if self._state == State.ERASE:
             self._state = State.RECTANGLE
         self._points = []

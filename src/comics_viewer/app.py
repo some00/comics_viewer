@@ -36,7 +36,7 @@ class App(Gtk.Application):
         self.window = builder.get_object("window")
         self.add_window(self.window)
         self.stack = builder.get_object("stack")
-        self.statusbar = builder.get_object("statusbar")
+        self.statusbar = builder.get_object("statusbar_scrolled")
         self.thumb_scrolled_window = builder.get_object(
             "thumb_scrolled_window")
         self.switcher = builder.get_object("switcher")
@@ -144,12 +144,15 @@ class App(Gtk.Application):
         self._view.cursor.set_cursor(CursorIcon.DEFAULT)
 
     def toggle_profiler(self):
+        import time
         self._pr_enabled = not self._pr_enabled
         if self._pr_enabled:
             print("profiler started")
+            self._pr_start = time.time()
             self._pr.enable()
         else:
             self._pr.disable()
             import pstats
             ps = pstats.Stats(self._pr).sort_stats("tottime")
             ps.print_stats()
+            print(time.time() - self._pr_start)
