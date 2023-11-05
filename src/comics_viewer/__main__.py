@@ -3,6 +3,8 @@ import numpy as np
 from functools import partial
 from contextlib import ExitStack
 import signal
+import argparse
+import os
 
 from .library import Library
 from .view import View
@@ -12,11 +14,18 @@ from .gi_helpers import GLib
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--library", default="~/comics")
+    args = parser.parse_args()
+
+    library = Path(os.environ.get("COMICS_LIBRAYR",
+                                  args.library)).expanduser().absolute()
+
     with ExitStack() as stack:
         TEMP = Path("./data/cache").absolute()
         create_library = partial(
             Library,
-            library=Path("~/tmp/foo").expanduser().absolute(),
+            library=library,
             db=Path("./data/db.sqlite").absolute(),
             cover_cache=stack.enter_context(
                 CoverCache(TEMP / "cover", np.array([240, 240]))
