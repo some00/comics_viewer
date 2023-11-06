@@ -1,3 +1,6 @@
 **/__pycache__
-data
+/data
 **/*.glade~
+env.sh
+.coverage
+comics_viewer
