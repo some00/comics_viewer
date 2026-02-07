@@ -1,6 +1,6 @@
-git+https://gitlab.gnome.org/GNOME/pygobject.git
+git+https://gitlab.gnome.org/GNOME/pygobject.git@da2717480488ed93f1038ea106c7a9c394059e1d
 Pillow
-git+https://github.com/shapely/shapely.git
+shapely
 humanize
 SQLAlchemy
 rarfile
