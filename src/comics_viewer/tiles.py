@@ -311,6 +311,7 @@ class Tiles:
         inside = []
         outside = None
         for tile in self._tree.query(selection):
+            tile = self._tree.geometries[tile]
             if selection.contains(tile):
                 inside.append(self._tree_indices[id(tile)])
                 continue
@@ -344,7 +345,8 @@ class Tiles:
                       ).exterior
             append_point(nearest_points(img, pos)[0])
         if self._tiles:
-            tile = self._line_tree.nearest(pos)
+            tile = self._line_tree.geometries[
+                self._line_tree.nearest(pos)]
             tile_point = nearest_points(tile, pos)[0]
             append_point(tile_point)
         if cands:
