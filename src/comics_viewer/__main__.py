@@ -38,7 +38,7 @@ def main():
                   application_id="com.github.some00.comics_viewer",)
         for sig in [signal.SIGINT, signal.SIGTERM]:
             GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig,
-                                 lambda *x: app.quit(), None)
+                                 lambda *_: app.quit(), None)
         app.run()
 
 

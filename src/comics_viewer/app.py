@@ -1,14 +1,27 @@
-from typing import Optional
+from collections.abc import Callable
+from typing import Optional, Protocol, Any
 from enum import Enum
 from contextlib import ExitStack
 
-from .gi_helpers import Gtk, Gio, GLib, Gdk
+from .gi_helpers import Gio, GLib, Gdk, Gtk
 from .library import Library
 from .view import View
 from .manage import Manage
 from .utils import RESOURCE_BASE_DIR
 from .cursor import CursorIcon
 
+
+AddAction = Callable[[Gio.Action], None]
+
+class CreateView(Protocol):
+    def __call__(self, builder: Gtk.Builder, app: App,
+                 add_action: AddAction, library: Library) -> View:
+        ...
+
+class CreateLibrary(Protocol):
+    def __call__(self, builder: Gtk.Builder, app: App,
+                 add_action: AddAction) -> Library:
+        ...
 
 class StackName(Enum):
     manage = "manage"
@@ -17,31 +30,45 @@ class StackName(Enum):
 
 
 class App(Gtk.Application):
-    def __init__(self, stack: ExitStack, create_library,
-                 create_view, *args, **kwargs):
+    def __init__(self, stack: ExitStack, create_library: CreateLibrary,
+                 create_view: CreateView, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._create_library = create_library
-        self._create_view = create_view
+        self._create_library: CreateLibrary = create_library
+        self._create_view: CreateView = create_view
         self._library: Optional[Library] = None
         self._view: Optional[View] = None
         self._manage: Optional[Manage] = None
         self._stack = stack
         self.window: Optional[Gtk.ApplicationWindow] = None
+        self.stack: Optional[Gtk.Stack] = None
+        self.statusbar: Optional[Gtk.ScrolledWindow] = None
+        self.thumb_scrolled_window: Optional[Gtk.ScrolledWindow] = None
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "layout.glade"))
-        self.area = builder.get_object("view")
-        self.window = builder.get_object("window")
+        area = builder.get_object("view")
+        assert isinstance(area, Gtk.GLArea)
+        self.area = area
+        window = builder.get_object("window")
+        assert isinstance(window, Gtk.ApplicationWindow)
+        self.window = window
         self.add_window(self.window)
-        self.stack = builder.get_object("stack")
-        self.statusbar = builder.get_object("statusbar_scrolled")
-        self.thumb_scrolled_window = builder.get_object(
-            "thumb_scrolled_window")
-        self.switcher = builder.get_object("switcher")
-        builder.get_object("stack").connect("notify::visible-child-name",
-                                            self.visible_child_changed)
+        stack = builder.get_object("stack")
+        assert isinstance(stack, Gtk.Stack)
+        self.stack = stack
+        statusbar = builder.get_object("statusbar_scrolled")
+        assert isinstance(statusbar, Gtk.ScrolledWindow)
+        self.statusbar = statusbar
+        thumb_scrolled_window = builder.get_object("thumb_scrolled_window")
+        assert isinstance(thumb_scrolled_window, Gtk.ScrolledWindow)
+        self.thumb_scrolled_window = thumb_scrolled_window
+        switcher = builder.get_object("switcher")
+        assert isinstance(switcher, Gtk.StackSwitcher)
+        self.switcher = switcher
+        self.stack.connect("notify::visible-child-name",
+                           self.visible_child_changed)
 
         self._library = self._create_library(builder=builder,
                                              add_action=self.add_action,
@@ -91,18 +118,22 @@ class App(Gtk.Application):
         self._library.start_refresh()
 
     def do_activate(self):
+        assert self.window is not None
         self.window.present()
 
     @property
-    def fullscreen(self):
-        return bool(
-            self.window and
-            self.window.get_window() and
-            self.window.get_window().get_state() & Gdk.WindowState.FULLSCREEN
-        )
+    def fullscreen(self) -> bool:
+        if self.window is not None:
+            window = self.window.get_window()
+            if window is not None:
+                return bool(window.get_state() & Gdk.WindowState.FULLSCREEN)
+        return False
 
-    def set_fullscreen(self, action, value):
+    def set_fullscreen(self, _, value):
         if self.window:
+            assert self.statusbar is not None
+            assert self.thumb_scrolled_window is not None
+            assert self.switcher is not None
             if value.get_boolean():
                 self.statusbar.hide()
                 self.thumb_scrolled_window.hide()
@@ -115,17 +146,22 @@ class App(Gtk.Application):
                 self.window.unfullscreen()
         self.fs.set_state(GLib.Variant.new_boolean(self.fullscreen))
 
-    def configure_event(self, widget, event):
+    def configure_event(self, *_):
         self.change_fullscreen(self.fullscreen)
 
     def change_fullscreen(self, fs: bool):
         self.fs.change_state(GLib.Variant.new_boolean(fs))
 
     def view_comics(self, *args, **kwargs):
+        assert self._view is not None
         if self._view.load(*args, **kwargs):
+            assert self.stack is not None
             self.stack.set_visible_child_name("view")
 
-    def visible_child_changed(self, stack, param):
+    def visible_child_changed(self, stack, _):
+        assert self._manage is not None
+        assert self.area is not None
+        assert self._library is not None
         name = stack.get_visible_child_name()
         if name == StackName.manage.value:
             self.disable_view()
@@ -140,6 +176,7 @@ class App(Gtk.Application):
             raise RuntimeError("unknown stack child")
 
     def disable_view(self):
+        assert self._view is not None
         self._view.timer.enabled = False
         self._view.cursor.set_cursor(CursorIcon.DEFAULT)
 

@@ -1,11 +1,14 @@
 import gi
-import importlib
-__all__ = []
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Rsvg", "2.0")
-for name in ["Gtk", "GLib", "Gdk", "GObject", "GdkPixbuf", "Gio", "GObject",
-             "Rsvg"]:
-    module = importlib.import_module(f"gi.repository.{name}")
-    globals()[name] = module
-    __all__.append(name)
+from gi.repository import Gtk
+from gi.repository import Gdk
+from gi.repository import GLib
+from gi.repository import GObject
+from gi.repository import GdkPixbuf
+from gi.repository import Gio
+from gi.repository import GObject
+from gi.repository import Rsvg
+
+__all__ = [Gtk, Gdk, GLib, GObject, GdkPixbuf, Gio, Rsvg]

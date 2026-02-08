@@ -224,7 +224,7 @@ class Library:
         return self._library
 
     @property
-    def last_viewed(self) -> Optional[Tuple[Path, int]]:
+    def last_viewed(self) -> Optional[Comics]:
         return self.new_session.query(Comics).join(Progress).filter(
             Comics.pages - 1 != Progress.page_idx
         ).order_by(Progress.last_read.desc()).limit(1).one_or_none()
