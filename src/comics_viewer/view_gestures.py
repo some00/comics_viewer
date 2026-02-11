@@ -4,7 +4,7 @@ from collections import namedtuple
 import numpy.typing as npt
 from enum import Enum
 
-from .utils import is_in
+from .utils import is_in, get_object
 from .gi_helpers import Gtk, Gdk
 from .cursor import Cursor, CursorIcon
 
@@ -23,6 +23,7 @@ DragData = namedtuple("DragData", [
 
 def event_source_type() -> Optional[Gdk.InputSource]:
     event = Gtk.get_current_event()
+    assert event is not None
     source_device = event.get_source_device()
     if source_device is None:
         return None
@@ -62,8 +63,8 @@ def gesture_msg(*args, **kwargs):
 class ViewGestures:
     def __init__(self, view, builder: Gtk.Builder):
         self._view = view
-        event_box = builder.get_object("view_event_box")
-        self.window = builder.get_object("window")
+        event_box = get_object(builder, Gtk.EventBox, "view_event_box")
+        self.window = get_object(builder, Gtk.ApplicationWindow, "window")
 
         self._zoom = Gtk.GestureZoom.new(event_box)
         self._zoom.connect("begin", self.zoom_begin)
@@ -108,25 +109,24 @@ class ViewGestures:
     def edit_with_mouse(self, edit_with_mouse):
         self._edit_with_mouse = edit_with_mouse
 
-    def zoom_begin(self, gesture: Gtk.GestureZoom,
-                   sequence: Optional[Gdk.EventSequence]):
+    def zoom_begin(self, *_):
         gesture_msg("zoom begin")
         self._scale_at_begin = self._view.scale
         self._position_at_begin = self._view.position
 
-    def zoom_end(self, gesture: Gtk.GestureZoom,
-                 sequence: Optional[Gdk.EventSequence]):
+    def zoom_end(self, *_):
         gesture_msg("zoom end")
         self._scale_at_begin = None
         self._position_at_begin = None
 
     def zoom_scale_changed(self, gesture: Gtk.GestureZoom,
-                           sequence: Optional[Gdk.EventSequence]):
+                           _: Optional[Gdk.EventSequence]):
         gesture_msg("zoom scale changed")
+        assert self._scale_at_begin is not None
         self._view.scale = self._scale_at_begin * gesture.get_scale_delta()
         self._view.position = self._position_at_begin
 
-    def drag_begin(self, gesture: Gtk.GestureDrag,
+    def drag_begin(self, _: Gtk.GestureDrag,
                    start_x: float, start_y: float):
         gesture_msg("drag begin")
         start = np.array([start_x, start_y])
@@ -137,10 +137,11 @@ class ViewGestures:
             start_img=self._view.widget_to_img(start, self._view.affine()),
         )
 
-    def drag_update(self, gesture: Gtk.GestureDrag,
+    def drag_update(self, _: Gtk.GestureDrag,
                     offset_x: float, offset_y: float):
         gesture_msg("drag update")
         offset = np.array([offset_x, offset_y])
+        assert self._drag_data is not None
         self._view.position = self._drag_data.start_pos - (
             self._view.widget_to_img(
                 self._drag_data.start_widget + offset,
@@ -162,7 +163,7 @@ class ViewGestures:
         elif abs(w - x) < threshold:
             self._view.page_idx += int(np.sign(h))
 
-    def swipe(self, gesture: Gtk.GestureSwipe,
+    def swipe(self, _: Gtk.GestureSwipe,
               velocity_x: float, velocity_y: float):
         gesture_msg("swipe")
         if not np.isclose(self._view.scale, 1):
@@ -204,8 +205,7 @@ class ViewGestures:
         return True
 
     @dec_event_handler
-    def leave_notify_event(self, event_box: Gtk.EventBox,
-                           event: Gdk.EventCrossing):
+    def leave_notify_event(self, *_):
         self.tiles.pen_left()
         return False
 

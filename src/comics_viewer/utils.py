@@ -1,7 +1,8 @@
-from typing import List, Any, NewType, Callable, TypeVar, Type
+from typing import List, Any, NewType, Callable, TypeVar, Type, Optional
 from pathlib import Path
 from collections import namedtuple
 import numpy as np
+import numpy.typing as npt
 from difflib import SequenceMatcher
 from enum import IntEnum
 from PIL import Image as image
@@ -135,7 +136,9 @@ def image_to_pixbuf(img: Image) -> GdkPixbuf.Pixbuf:
         destroy_fn=None)
 
 
-def is_in(widget: Gtk.Widget, x: int, y: int):
+def is_in(
+    widget: Gtk.Widget, x: float, y: float
+) -> Optional[npt.NDArray[np.float64]]:
     pos = np.array([x, y])
     rect = widget.get_allocation()
     shape = np.array([rect.width, rect.height])

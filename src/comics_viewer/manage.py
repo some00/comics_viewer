@@ -48,8 +48,7 @@ class Manage:
         issue_renderer.connect("edited", self._issue_edited)
         cover_renderer = Gtk.CellRendererText(editable=True)
         cover_renderer.connect("edited", self._cover_edited)
-        self._comics = builder.get_object("manage_comics")
-        assert isinstance(self._comics, Gtk.TreeView)
+        self._comics = get_object(builder, Gtk.TreeView, "manage_comics")
         self._comics.append_column(TVC("Path",
                                        Gtk.CellRendererText(),
                                        text=ComicsColumn.path))
@@ -68,9 +67,9 @@ class Manage:
         self._contained_renderer = Gtk.CellRendererToggle()
         self._contained_renderer.connect("toggled", self._contained_changed)
         self._contained_renderer.set_sensitive(False)
-        collections = builder.get_object("manage_collections")
-        assert isinstance(collections, Gtk.TreeView)
-        self._collections = collections
+        self._collections = get_object(builder,
+                                       Gtk.TreeView,
+                                       "manage_collections")
         self._collections.append_column(TVC("Collection",
                                             Gtk.CellRendererText(),
                                             text=CollectionColumn.collection))
@@ -79,7 +78,7 @@ class Manage:
                                             active=CollectionColumn.contained))
         self._collections.get_selection().set_mode(Gtk.SelectionMode.NONE)
 
-        self._stack = builder.get_object("stack")
+        self._stack = get_object(builder, Gtk.Stack, "stack")
         self._switcher = get_object(builder, Gtk.StackSwitcher, "switcher")
 
         self._set_session_action_states()

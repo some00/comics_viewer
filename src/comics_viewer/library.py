@@ -21,7 +21,7 @@ from .cover_cache import CoverCache
 from .gi_helpers import Gio, Gtk, GObject, GLib
 from .utils import (
     wrap_add_action, refresh_gtk_model, refresh_gio_model, RESOURCE_BASE_DIR,
-    image_to_pixbuf,
+    image_to_pixbuf, get_object
 )
 
 
@@ -135,13 +135,10 @@ class Library:
         self._engine = create_engine(f"sqlite:///{db.absolute()}")
         self.list_store = Gio.ListStore()
 
-        view = builder.get_object("library_view")
-        assert isinstance(view, Gtk.ComboBoxText)
-        self.view: Gtk.ComboBoxText = view
+        self.view = get_object(builder, Gtk.ComboBoxText, "library_view")
         self.view.connect("changed", lambda view: self.refresh_models())
 
-        flowbox = builder.get_object("library")
-        assert isinstance(flowbox, Gtk.FlowBox)
+        flowbox = get_object(builder, Gtk.FlowBox, "library")
         flowbox.bind_model(self.list_store, self.create_comics_box)
         flowbox.connect("child-activated", self.comics_activated)
 
@@ -253,22 +250,18 @@ class Library:
                 label = f"{title} #{issue}"
             else:
                 label = title
-        label_widget = builder.get_object("label")
-        assert isinstance(label_widget, Gtk.Label)
+        label_widget = get_object(builder, Gtk.Label, "label")
         label_widget.set_label(cast(str, label))
         if pages:
-            image_widget = builder.get_object("image")
-            assert isinstance(image_widget, Gtk.Image)
+            image_widget = get_object(builder, Gtk.Image, "image")
             image_widget.set_from_pixbuf(
                 image_to_pixbuf(self._cover_cache.cover(
                     self._library, Path(cast(str, path)),
                     0 if cover_idx is None else cast(int, cover_idx)
                 )))
-        progress_widget = builder.get_object("progress")
-        assert isinstance(progress_widget, Gtk.ProgressBar)
+        progress_widget = get_object(builder, Gtk.ProgressBar, "progress")
         progress_widget.set_fraction(progress)
-        rv = builder.get_object("icon")
-        assert isinstance(rv, Gtk.Box)
+        rv = get_object(builder, Gtk.Box, "icon")
         rv.comics = obj.comics  # pyrefly: ignore[missing-attribute]
         return rv
 
@@ -285,12 +278,10 @@ class Library:
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR /
                                   "add_collection_dialog.glade"))
-        dialog = builder.get_object("dialog")
-        assert isinstance(dialog, Gtk.Dialog)
+        dialog = get_object(builder, Gtk.Dialog, "dialog")
         ok = dialog.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
         ok.set_sensitive(False)
-        name = builder.get_object("name")
-        assert isinstance(name, Gtk.Entry)
+        name = get_object(builder, Gtk.Entry, "name")
 
         def changed(name):
             ok.set_sensitive(self.check_colleciton_name(name.get_text()))
@@ -333,12 +324,10 @@ class Library:
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR /
                                   "remove_collection_dialog.glade"))
-        label = builder.get_object("label")
-        assert isinstance(label, Gtk.Label)
+        label = get_object(builder, Gtk.Label, "label")
         label.set_text(label.get_text().format(
             collection=self.view.get_active_text()))
-        dialog = builder.get_object("dialog")
-        assert isinstance(dialog, Gtk.Dialog)
+        dialog = get_object(builder, Gtk.Dialog, "dialog")
         dialog.add_buttons(Gtk.STOCK_YES, Gtk.ResponseType.OK,
                            Gtk.STOCK_NO, Gtk.ResponseType.CANCEL)
         if dialog.run() == Gtk.ResponseType.OK:

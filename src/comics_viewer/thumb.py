@@ -3,7 +3,9 @@ from pathlib import Path
 
 from .gi_helpers import Gtk, Gio, GObject, GLib
 from .cover_cache import CoverCache
-from .utils import refresh_gio_model, image_to_pixbuf, RESOURCE_BASE_DIR
+from .utils import (
+    refresh_gio_model, image_to_pixbuf, RESOURCE_BASE_DIR, get_object,
+)
 from .archive import Archive
 
 
@@ -31,14 +33,12 @@ class Thumb:
                  thumb_cache: CoverCache, library: Path):
         self._view = view
         self._library = library
-        thumb = builder.get_object("thumb")
-        assert isinstance(thumb, Gtk.FlowBox)
-        self._thumb = thumb
+        self._thumb = get_object(builder, Gtk.FlowBox, "thumb")
         self._store = Gio.ListStore()
         self._thumb.bind_model(self._store, self.create_thumb)
-        scrolled_window = builder.get_object("thumb_scrolled_window")
-        assert isinstance(scrolled_window, Gtk.ScrolledWindow)
-        self._scrolled_window = scrolled_window
+        self._scrolled_window = get_object(builder,
+                                           Gtk.ScrolledWindow,
+                                           "thumb_scrolled_window")
         self._cache = thumb_cache
         self._archive: Optional[Archive] = None
         self._to_load = []
@@ -76,13 +76,13 @@ class Thumb:
     def create_thumb(self, obj: PageInfo) -> Gtk.Box:
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "page_icon.glade"))
-        self._to_load.append((obj.page_idx, builder.get_object("img")))
-        label = builder.get_object("label")
-        assert isinstance(label, Gtk.Label)
-        label.set_label(f"{obj.page_idx + 1}")
+        self._to_load.append((obj.page_idx, get_object(builder,
+                                                       Gtk.Image,
+                                                       "img")))
+        get_object(builder, Gtk.Label, "label") \
+            .set_label(f"{obj.page_idx + 1}")
         self.ensure_idle()
-        rv = builder.get_object("box")
-        assert isinstance(rv, Gtk.Box)
+        rv = get_object(builder, Gtk.Box, "box")
         rv.page_idx = obj.page_idx  # pyrefly: ignore[missing-attribute]
         return rv
 

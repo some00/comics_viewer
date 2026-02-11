@@ -23,7 +23,7 @@ from .gi_helpers import Gtk, Gdk
 from .in_mem_cache import InMemCache
 from .archive import Archive
 from .cover_cache import CoverCache
-from .utils import imdecode, RESOURCE_BASE_DIR, wrap_add_action
+from .utils import imdecode, RESOURCE_BASE_DIR, wrap_add_action, get_object
 from .thumb import Thumb
 from .view_gestures import ViewGestures
 from .tiles import Tiles
@@ -142,16 +142,16 @@ class View:
                             thumb_cache=thumb_cache, library=library.path)
         self._app = app
         self._library = library
-        self._area = builder.get_object("view")
-        self._window = builder.get_object("window")
+        self._area = get_object(builder, Gtk.GLArea, "view")
+        self._window = get_object(builder, Gtk.ApplicationWindow, "window")
         self._status = Status(
-            container=builder.get_object("statusbar"),
-            comics=builder.get_object("comics"),
-            progress=builder.get_object("progress"),
-            pagename=builder.get_object("pagename"),
-            progress_bar=builder.get_object("progress_bar"),
-            img_shape=builder.get_object("img_shape"),
-            encoded_size=builder.get_object("encoded_size"),
+            container=get_object(builder, Gtk.Box, "statusbar"),
+            comics=get_object(builder, Gtk.Label, "comics"),
+            progress=get_object(builder, Gtk.Label, "progress"),
+            pagename=get_object(builder, Gtk.Label, "pagename"),
+            progress_bar=get_object(builder, Gtk.ProgressBar, "progress_bar"),
+            img_shape=get_object(builder, Gtk.Label, "img_shape"),
+            encoded_size=get_object(builder, Gtk.Label, "encoded_size"),
         )
         self._in_mem = InMemCache(max_cache)
         self._archive: Optional[Archive] = None

@@ -11,6 +11,7 @@ from shapely.ops import nearest_points
 
 from .gi_helpers import Gtk
 from .cursor import CursorIcon
+from .utils import get_object
 
 
 WidgetPos = NewType("WidgetPos", npt.NDArray)
@@ -136,7 +137,9 @@ class WidgetPosCache:
 class Tiles:
     def __init__(self, view, builder: Gtk.Builder):
         # contants members
-        self._area: Gtk.DrawingArea = builder.get_object("view_drawing")
+        self._area: Gtk.DrawingArea = get_object(builder,
+                                                 Gtk.DrawingArea,
+                                                 "view_drawing")
         self._view = view
         self._colors = Colors()
 

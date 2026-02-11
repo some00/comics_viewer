@@ -8,7 +8,7 @@ from collections import defaultdict
 from shapely.geometry import MultiPoint
 
 from .gi_helpers import Gdk, Gtk, Rsvg, GdkPixbuf
-from .utils import RESOURCE_BASE_DIR
+from .utils import RESOURCE_BASE_DIR, get_object
 
 
 class CursorIcon(Enum):
@@ -32,9 +32,7 @@ def svg_handle(path: Path):
 class Cursor:
     def __init__(self, builder: Gtk.Builder, view):
         self._view = view
-        window = builder.get_object("window")
-        assert isinstance(window, Gtk.Window)
-        self.gtk_window = window
+        self.gtk_window = get_object(builder, Gtk.Window, "window")
         self._cursors: Dict[
             CursorIcon, List[Tuple[Gdk.Cursor, Optional[float]]]
         ] = defaultdict(list)

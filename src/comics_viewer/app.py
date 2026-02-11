@@ -7,7 +7,7 @@ from .gi_helpers import Gio, GLib, Gdk, Gtk
 from .library import Library
 from .view import View
 from .manage import Manage
-from .utils import RESOURCE_BASE_DIR
+from .utils import RESOURCE_BASE_DIR, get_object
 from .cursor import CursorIcon
 
 
@@ -51,25 +51,17 @@ class App(Gtk.Application):
         Gtk.Application.do_startup(self)
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "layout.glade"))
-        area = builder.get_object("view")
-        assert isinstance(area, Gtk.GLArea)
-        self.area = area
-        window = builder.get_object("window")
-        assert isinstance(window, Gtk.ApplicationWindow)
-        self.window = window
+        self.area = get_object(builder, Gtk.GLArea, "view")
+        self.window = get_object(builder, Gtk.ApplicationWindow, "window")
         self.add_window(self.window)
-        stack = builder.get_object("stack")
-        assert isinstance(stack, Gtk.Stack)
-        self.stack = stack
-        statusbar = builder.get_object("statusbar_scrolled")
-        assert isinstance(statusbar, Gtk.ScrolledWindow)
-        self.statusbar = statusbar
-        thumb_scrolled_window = builder.get_object("thumb_scrolled_window")
-        assert isinstance(thumb_scrolled_window, Gtk.ScrolledWindow)
-        self.thumb_scrolled_window = thumb_scrolled_window
-        switcher = builder.get_object("switcher")
-        assert isinstance(switcher, Gtk.StackSwitcher)
-        self.switcher = switcher
+        self.stack = get_object(builder, Gtk.Stack, "stack")
+        self.statusbar = get_object(builder,
+                                    Gtk.ScrolledWindow,
+                                    "statusbar_scrolled")
+        self.thumb_scrolled_window = get_object(builder,
+                                                Gtk.ScrolledWindow,
+                                                "thumb_scrolled_window")
+        self.switcher = get_object(builder, Gtk.StackSwitcher, "switcher")
         self.stack.connect("notify::visible-child-name",
                            self.visible_child_changed)
 
