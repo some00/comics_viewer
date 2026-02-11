@@ -3,7 +3,7 @@ from enum import IntEnum
 
 from .library import Library, Collection, Comics, Lib
 from .gi_helpers import Gtk, Gio
-from .utils import wrap_add_action, refresh_gtk_model
+from .utils import wrap_add_action, refresh_gtk_model, get_object
 
 STACK_NAME = "manage"
 TVC = Gtk.TreeViewColumn
@@ -30,16 +30,17 @@ class Manage:
         self._session = self._library.new_session
         self._clipboard_title: Optional[str] = None
 
-        add_action = wrap_add_action(add_action)
-        self._save_action = add_action("save-manage", self.save)
-        self._discard_action = add_action("discard-manage", self.discard)
-        self._autoincrement_action = add_action("autoincrement-manage",
-                                                self.autoincrement)
+        add_action_wrapped = wrap_add_action(add_action)
+        self._save_action = add_action_wrapped("save-manage", self.save)
+        self._discard_action = add_action_wrapped("discard-manage",
+                                                  self.discard)
+        self._autoincrement_action = add_action_wrapped("autoincrement-manage",
+                                                        self.autoincrement)
         self._autoincrement_action.set_enabled(False)
-        self._copy_title_action = add_action("copy-title-manage",
-                                             self.copy_title)
-        self._paste_title_action = add_action("paste-title-manage",
-                                              self.paste_title)
+        self._copy_title_action = add_action_wrapped("copy-title-manage",
+                                                     self.copy_title)
+        self._paste_title_action = add_action_wrapped("paste-title-manage",
+                                                      self.paste_title)
 
         title_renderer = Gtk.CellRendererText(editable=True)
         title_renderer.connect("edited", self._title_edited)
@@ -48,6 +49,7 @@ class Manage:
         cover_renderer = Gtk.CellRendererText(editable=True)
         cover_renderer.connect("edited", self._cover_edited)
         self._comics = builder.get_object("manage_comics")
+        assert isinstance(self._comics, Gtk.TreeView)
         self._comics.append_column(TVC("Path",
                                        Gtk.CellRendererText(),
                                        text=ComicsColumn.path))
@@ -66,7 +68,9 @@ class Manage:
         self._contained_renderer = Gtk.CellRendererToggle()
         self._contained_renderer.connect("toggled", self._contained_changed)
         self._contained_renderer.set_sensitive(False)
-        self._collections = builder.get_object("manage_collections")
+        collections = builder.get_object("manage_collections")
+        assert isinstance(collections, Gtk.TreeView)
+        self._collections = collections
         self._collections.append_column(TVC("Collection",
                                             Gtk.CellRendererText(),
                                             text=CollectionColumn.collection))
@@ -76,7 +80,7 @@ class Manage:
         self._collections.get_selection().set_mode(Gtk.SelectionMode.NONE)
 
         self._stack = builder.get_object("stack")
-        self._switcher = builder.get_object("switcher")
+        self._switcher = get_object(builder, Gtk.StackSwitcher, "switcher")
 
         self._set_session_action_states()
         self._set_clipboad_action_states()

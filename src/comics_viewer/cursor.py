@@ -22,6 +22,7 @@ class CursorIcon(Enum):
 @contextmanager
 def svg_handle(path: Path):
     handle = Rsvg.Handle.new_from_file(str(path))
+    assert handle is not None
     try:
         yield handle
     finally:
@@ -31,14 +32,18 @@ def svg_handle(path: Path):
 class Cursor:
     def __init__(self, builder: Gtk.Builder, view):
         self._view = view
-        self.gtk_window: Gtk.Window = builder.get_object("window")
+        window = builder.get_object("window")
+        assert isinstance(window, Gtk.Window)
+        self.gtk_window = window
         self._cursors: Dict[
             CursorIcon, List[Tuple[Gdk.Cursor, Optional[float]]]
         ] = defaultdict(list)
 
     @property
     def gdk_window(self) -> Gdk.Window:
-        return self.gtk_window.get_window()
+        rv = self.gtk_window.get_window()
+        assert rv is not None
+        return rv
 
     @property
     def gdk_display(self) -> Gdk.Display:
@@ -48,25 +53,27 @@ class Cursor:
         for cursor, angle in self._cursors[icon]:
             if angle is None or np.isclose(self._view.angle, angle):
                 return cursor
-        assert(isinstance(icon.value, (Path, str)))
+        assert isinstance(icon.value, (Path, str))
         if isinstance(icon.value, Path):
             cursor = self._create_cursor(icon.value)
             self._cursors[icon].append((cursor, self._view.angle))
             return cursor
         elif isinstance(icon.value, str):
             cursor = Gdk.Cursor.new_from_name(self.gdk_display, icon.value)
+            assert cursor is not None
             self._cursors[icon].append((cursor, None))
+        return cursor
 
     def set_cursor(self, icon: CursorIcon):
         self.gdk_window.set_cursor(self._get_cursor(icon))
 
-    def _create_cursor(self, svg: Path):
+    def _create_cursor(self, svg: Path) -> Gdk.Cursor:
         w, h = (self.gdk_display.get_default_cursor_size(),) * 2
         with svg_handle(svg) as handle:
             img = np.zeros((h, w, 4), dtype=np.uint8)
             fmt = cairo.Format.ARGB32
             stride = fmt.stride_for_width(w)
-            assert(stride == w * 4)
+            assert stride == w * 4
             # NOTE: F endian and alignment
             with cairo.ImageSurface.create_for_data(
                 memoryview(img), fmt, w, h, stride
@@ -86,9 +93,10 @@ class Cursor:
                 bits_per_sample=8,
                 width=img.shape[1],
                 height=img.shape[0],
-                rowstride=img.shape[1] * 4)
+                rowstride=img.shape[1] * 4,
+                destroy_fn=None)
             return Gdk.Cursor.new_from_pixbuf(
                 self.gdk_display,
                 pixbuf,
-                *MultiPoint([np.zeros(2), rect]).bounds[2:]
+                *map(int, MultiPoint([np.zeros(2), rect]).bounds[2:])
             )

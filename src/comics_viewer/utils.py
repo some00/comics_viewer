@@ -1,4 +1,4 @@
-from typing import List, Any, NewType
+from typing import List, Any, NewType, Callable, TypeVar, Type
 from pathlib import Path
 from collections import namedtuple
 import numpy as np
@@ -7,6 +7,7 @@ from enum import IntEnum
 from PIL import Image as image
 from PIL.Image import Image
 from io import BytesIO
+from functools import partial
 
 from .gi_helpers import Gio, Gtk, GdkPixbuf
 
@@ -14,10 +15,12 @@ from .gi_helpers import Gio, Gtk, GdkPixbuf
 RESOURCE_BASE_DIR = Path(__file__).parent
 Coord = namedtuple("Coord", ["x", "y"])
 ImgSize = NewType("ImgSize", Coord)
+NewType  # silence unused import
+T = TypeVar("T", bound=Gtk.Widget)
 
 
 def image_shape(img: Image) -> ImgSize:
-    return Coord(*img.size)
+    return ImgSize(Coord(*img.size))
 
 
 def imdecode(buf: bytes) -> Image:
@@ -55,18 +58,21 @@ def diff_opcodes(a, b):
             yield Opcode.equal, i1, i2, j1, j2
 
 
-def wrap_add_action(add_action):
-    def add_action(name, handler, add_action=add_action):
+def wrap_add_action(
+    add_action: Callable[[Gio.Action], None]
+) -> Callable[[str, Callable[[], None]], Gio.SimpleAction]:
+    def helper(name: str, handler: Callable[[], None],
+               add_action: Callable[[Gio.Action], None]) -> Gio.SimpleAction:
         rv = Gio.SimpleAction.new(name, None)
         rv.connect("activate", lambda *x, handler=handler: handler())
         add_action(rv)
         return rv
-    return add_action
+    return partial(helper, add_action=add_action)
 
 
 def refresh_gtk_model(model: Gtk.ListStore, target: List[Any],
                       offset: int = 0):
-    ms = list(model)[offset:]
+    ms = list(x for x in model)[offset:]
     for code, i1, i2, j1, j2 in diff_opcodes(ms, target):
         i1 += offset
         i2 += offset
@@ -81,19 +87,25 @@ def refresh_gtk_model(model: Gtk.ListStore, target: List[Any],
         elif code == Opcode.replace:
             for i, j in zip(range(i1, i2 + 1), range(j1, j2 + 1)):
                 if i < len(model) and j < len(target):
-                    model.set_row(model.iter_nth_child(None, i), target[j])
+                    iter = model.iter_nth_child(None, i)
+                    assert iter is not None
+                    model.set_row(iter, target[j])
                 elif i >= len(model) and j < len(target):
                     model.insert(i, target[j])
                 elif j >= len(target) and i < len(model):
-                    model.remove(model.iter_nth_child(None, i))
+                    iter = model.iter_nth_child(None, i)
+                    assert iter is not None
+                    model.remove(iter)
 
 
 def refresh_gio_model(model: Gio.ListModel, target: List[Any]):
     ms = list(model)
     for code, i1, i2, j1, j2 in diff_opcodes(ms, target):
         if code == Opcode.insert or code == Opcode.replace:
+            # pyrefly: ignore[unsupported-operation]
             model[i1:i2] = target[j1:j2]
         elif code == Opcode.delete:
+            # pyrefly: ignore[unsupported-operation]
             del model[i1:i2]
 
 
@@ -101,7 +113,7 @@ def dfs_gen(path: Path, base=None):
     if base is None:
         base = path
     for child in path.iterdir():
-        assert(not child.is_symlink())
+        assert not child.is_symlink()
         if child.is_dir():
             for grand in dfs_gen(child, base):
                 yield grand
@@ -111,7 +123,7 @@ def dfs_gen(path: Path, base=None):
 
 
 def image_to_pixbuf(img: Image) -> GdkPixbuf.Pixbuf:
-    assert(img.mode == "RGB")
+    assert img.mode == "RGB"
     return GdkPixbuf.Pixbuf.new_from_data(
         data=img.tobytes(),
         colorspace=GdkPixbuf.Colorspace.RGB,
@@ -119,7 +131,8 @@ def image_to_pixbuf(img: Image) -> GdkPixbuf.Pixbuf:
         bits_per_sample=8,
         width=img.width,
         height=img.height,
-        rowstride=img.width * 3)
+        rowstride=img.width * 3,
+        destroy_fn=None)
 
 
 def is_in(widget: Gtk.Widget, x: int, y: int):
@@ -130,3 +143,20 @@ def is_in(widget: Gtk.Widget, x: int, y: int):
         return pos.astype(np.float64)
     else:
         return None
+
+
+def get_object(
+    builder: Gtk.Builder,
+    cls: Type[T],
+    name: str,
+) -> T:
+    obj = builder.get_object(name)
+    if obj is None:
+        raise KeyError(f"No object named {name!r}")
+
+    if not isinstance(obj, cls):
+        raise TypeError(
+            f"Object {name!r} is {type(obj).__name__}, not {cls.__name__}"
+        )
+
+    return obj

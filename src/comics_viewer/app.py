@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Optional, Protocol, Any
+from typing import Optional, Protocol
 from enum import Enum
 from contextlib import ExitStack
 
@@ -13,15 +13,18 @@ from .cursor import CursorIcon
 
 AddAction = Callable[[Gio.Action], None]
 
+
 class CreateView(Protocol):
     def __call__(self, builder: Gtk.Builder, app: App,
                  add_action: AddAction, library: Library) -> View:
         ...
 
+
 class CreateLibrary(Protocol):
     def __call__(self, builder: Gtk.Builder, app: App,
                  add_action: AddAction) -> Library:
         ...
+
 
 class StackName(Enum):
     manage = "manage"

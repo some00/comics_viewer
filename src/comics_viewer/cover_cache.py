@@ -1,14 +1,15 @@
-from typing import Tuple, List, Optional, Dict, NewType, Union, Iterable
+from typing import Tuple, List, Optional, Dict, NewType, Union, Generator
 from hashlib import md5
 from pathlib import Path
 from binascii import hexlify
-import numpy.typing as npt
 import pickle
 from time import time
 from collections import namedtuple
 from itertools import chain
 from operator import itemgetter
 from PIL.Image import Image
+import numpy as np
+import numpy.typing as npt
 
 from .utils import imdecode, dfs_gen, imencode
 from .archive import Archive
@@ -17,8 +18,9 @@ from .gi_helpers import GLib
 
 
 LRU_INFO = Path("lru.pickle")
-Stamp = NewType("Stamp", int)
+Stamp = NewType("Stamp", float)
 ToCache = namedtuple("ToCache", ["library", "comics", "page_idx"])
+NewType  # silence unused import
 
 
 def cache_msg(*args, **kwargs):
@@ -28,7 +30,7 @@ def cache_msg(*args, **kwargs):
 
 # TODO rename thumbnail cache
 class CoverCache:
-    def __init__(self, path: Path, max_shape: npt.NDArray[int],
+    def __init__(self, path: Path, max_shape: npt.NDArray[np.int_],
                  max_in_mem: int = 12 * 1024 * 1024,
                  max_size: int = 100 * 1024 * 1024):
         self._base = path.absolute()
@@ -40,7 +42,8 @@ class CoverCache:
         self._idle_source: Optional[GLib.Source] = None
         self._lru: Dict[Path, Stamp] = {}
         self._size = 0
-        self._to_process: Iterable[Union[ToCache, Path]] = []
+        self._to_process: Generator[Union[ToCache, Path]] = \
+            (Path() for _ in range(0))
 
         lru = self._base / LRU_INFO
         if lru.exists():
@@ -56,7 +59,7 @@ class CoverCache:
 
     def cover(self, library: Path, comics: Path, idx: int) -> Image:
         k, p = self.key(library, comics, idx)
-        self._lru[p.relative_to(self._base)] = time()
+        self._lru[p.relative_to(self._base)] = Stamp(time())
         in_mem = self._in_mem.get(k)
         if in_mem is not None:
             cache_msg("in mem hit", k)
@@ -70,7 +73,7 @@ class CoverCache:
         else:
             page = Archive(library / comics).read(idx)
             thumb = imdecode(page)
-            thumb.thumbnail(self._max_shape)
+            thumb.thumbnail(tuple(self._max_shape))
             p.parent.mkdir(exist_ok=True, parents=True)
             with p.open("wb") as f:
                 # TODO just use PIL save
@@ -88,7 +91,7 @@ class CoverCache:
             self._idle_source.destroy()
         gen = (ToCache(library=library, comics=c, page_idx=i) for c, i in data)
         if self._size == 0:
-            self._to_process = chain(dfs_gen(self._base), gen)
+            self._to_process = (x for x in chain(dfs_gen(self._base), gen))
             cache_msg("calc size")
         else:
             self._to_process = gen
@@ -96,7 +99,7 @@ class CoverCache:
         self._idle_source.set_callback(self.idle)
         self._idle_source.attach(None)
 
-    def idle(self, arg):
+    def idle(self, _) -> int:
         try:
             v = next(self._to_process)
         except StopIteration:
@@ -122,13 +125,13 @@ class CoverCache:
             if not p.exists():
                 page = Archive(v.library / v.comics).read(v.page_idx)
                 thumb = imdecode(page)
-                thumb.thumbnail(self._max_shape)
+                thumb.thumbnail(tuple(self._max_shape))
                 p.parent.mkdir(exist_ok=True, parents=True)
                 with p.open("wb") as f:
                     # TODO just use PIL save
                     f.write(imencode(thumb))
                     cache_msg("new file entry", p)
-                self._lru[p.relative_to(self._base)] = 0
+                self._lru[p.relative_to(self._base)] = Stamp(0.0)
         return GLib.SOURCE_CONTINUE
 
     def cleanup(self):
@@ -145,13 +148,13 @@ class CoverCache:
                 break
         cache_msg("size after cleanup", self._size)
 
-    def key(self, library: Path, comics: Path, idx: int) -> Union[str, Path]:
-        assert(not comics.is_absolute())
+    def key(self, library: Path, comics: Path, idx: int) -> tuple[str, Path]:
+        assert not comics.is_absolute()
         h = md5()
         h.update(str(library).encode())
         h.update(str(comics).encode())
         h.update(f"${idx}".encode())
-        h.update("f_{self._max_shape[0]}x{self._max_size[1]}".encode())
+        h.update(f"{self._max_shape[0]}x{self._max_shape[1]}".encode())
         k = hexlify(h.digest()).decode()
         return k, self._base / k[:2] / k[2:]
 

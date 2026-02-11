@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Tuple, Union, Dict
+from typing import Generator, Optional, Union, Dict, Iterable, cast
 from pathlib import Path
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column
@@ -8,6 +8,8 @@ from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import create_engine
 from sqlalchemy import Table
+from sqlalchemy.orm import mapped_column
+from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql.expression import null
@@ -54,12 +56,12 @@ collection_association_table = Table(
 
 class Comics(Base):
     __tablename__ = "comics"
-    id = Column(Integer, primary_key=True)
-    path = Column(String, nullable=False, unique=True)
-    pages = Column(Integer, nullable=False)
-    title = Column(String, nullable=True)
-    issue = Column(Integer, nullable=True)
-    cover_idx = Column(Integer, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    path: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    pages: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String, nullable=True)
+    issue: Mapped[int] = mapped_column(Integer, nullable=True)
+    cover_idx: Mapped[int] = mapped_column(Integer, nullable=True)
 
     progress = relationship("Progress",
                             back_populates="comics",
@@ -133,14 +135,18 @@ class Library:
         self._engine = create_engine(f"sqlite:///{db.absolute()}")
         self.list_store = Gio.ListStore()
 
-        self.view = builder.get_object("library_view")
+        view = builder.get_object("library_view")
+        assert isinstance(view, Gtk.ComboBoxText)
+        self.view: Gtk.ComboBoxText = view
         self.view.connect("changed", lambda view: self.refresh_models())
 
         flowbox = builder.get_object("library")
+        assert isinstance(flowbox, Gtk.FlowBox)
         flowbox.bind_model(self.list_store, self.create_comics_box)
         flowbox.connect("child-activated", self.comics_activated)
 
-        self._to_process: Iterable[Union[Path, Comics]] = []
+        self._to_process: Generator[Union[Path, Comics]] = \
+            (Path() for _ in range(0))
         self._idle_id: Optional[int] = None
         self._comics: Dict[Path, Comics] = {}
         Base.metadata.create_all(self._engine)
@@ -164,10 +170,10 @@ class Library:
         session = self.new_session
         lib = session.query(Lib).filter(
             Lib.path == str(self._library)).one()
-        self._to_process = chain(
+        self._to_process = (x for x in chain(
             self.iterate_library(),
             iter(session.query(Comics).filter(Comics.lib == lib)),
-        )
+        ))
         self._idle_id = GLib.idle_add(self._iter_refresh, session, lib)
         self.set_action_states()
 
@@ -186,7 +192,7 @@ class Library:
                      Comics.path, Comics.cover_idx).join(Lib).filter(
                          Lib.path == str(self._library)).all()])
             return GLib.SOURCE_REMOVE
-        assert(isinstance(v, (Path, Comics)))
+        assert isinstance(v, (Path, Comics))
         if isinstance(v, Path):
             comics = session.query(Comics).filter(
                 Comics.path == str(v)).filter(
@@ -203,7 +209,8 @@ class Library:
                 session.add(comics)
         elif isinstance(v, Comics):
             try:
-                v.pages = pages = len(list_archive(self._library / v.path))
+                # pyrefly: ignore[bad-assignment]
+                v.pages = len(list_archive(self._library / v.path))
                 session.add(v)
             except IOError:
                 session.delete(v)
@@ -229,7 +236,7 @@ class Library:
             Comics.pages - 1 != Progress.page_idx
         ).order_by(Progress.last_read.desc()).limit(1).one_or_none()
 
-    def create_comics_box(self, obj: ComicsIcon):
+    def create_comics_box(self, obj: ComicsIcon) -> Gtk.Widget:
         title, path, pages, cover_idx, progress, issue = (
             obj.comics.title,
             obj.comics.path,
@@ -240,25 +247,32 @@ class Library:
         )
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "comics_icon.glade"))
-        label = Path(path).name
+        label = Path(cast(str, path)).name
         if title is not None:
             if issue is not None:
                 label = f"{title} #{issue}"
             else:
                 label = title
-        builder.get_object("label").set_label(label)
+        label_widget = builder.get_object("label")
+        assert isinstance(label_widget, Gtk.Label)
+        label_widget.set_label(cast(str, label))
         if pages:
-            builder.get_object("image").set_from_pixbuf(
+            image_widget = builder.get_object("image")
+            assert isinstance(image_widget, Gtk.Image)
+            image_widget.set_from_pixbuf(
                 image_to_pixbuf(self._cover_cache.cover(
-                    self._library, Path(path),
-                    0 if cover_idx is None else cover_idx
+                    self._library, Path(cast(str, path)),
+                    0 if cover_idx is None else cast(int, cover_idx)
                 )))
-        builder.get_object("progress").set_fraction(progress)
+        progress_widget = builder.get_object("progress")
+        assert isinstance(progress_widget, Gtk.ProgressBar)
+        progress_widget.set_fraction(progress)
         rv = builder.get_object("icon")
-        rv.comics = obj.comics
+        assert isinstance(rv, Gtk.Box)
+        rv.comics = obj.comics  # pyrefly: ignore[missing-attribute]
         return rv
 
-    def comics_activated(self, flowbox, child):
+    def comics_activated(self, _, child):
         comics = child.get_child().comics
         page_idx = comics.progress.page_idx if (
             comics.progress is not None and
@@ -272,15 +286,18 @@ class Library:
         builder.add_from_file(str(RESOURCE_BASE_DIR /
                                   "add_collection_dialog.glade"))
         dialog = builder.get_object("dialog")
+        assert isinstance(dialog, Gtk.Dialog)
         ok = dialog.add_button(Gtk.STOCK_OK, Gtk.ResponseType.OK)
         ok.set_sensitive(False)
         name = builder.get_object("name")
+        assert isinstance(name, Gtk.Entry)
 
         def changed(name):
             ok.set_sensitive(self.check_colleciton_name(name.get_text()))
 
         def activate(name):
             if self.check_colleciton_name(name.get_text()):
+                assert isinstance(ok, Gtk.Button)
                 ok.clicked()
 
         name.connect("changed", changed)
@@ -297,7 +314,7 @@ class Library:
     def check_colleciton_name(self, name: str, session=None) -> bool:
         if session is None:
             session = self.new_session
-        return name and 0 == session.query(Collection).filter_by(
+        return bool(name) and 0 == session.query(Collection).filter_by(
             name=name).join(Lib).filter_by(path=str(self.path)).count()
 
     def do_add_collection(self, name: str) -> bool:
@@ -317,13 +334,17 @@ class Library:
         builder.add_from_file(str(RESOURCE_BASE_DIR /
                                   "remove_collection_dialog.glade"))
         label = builder.get_object("label")
+        assert isinstance(label, Gtk.Label)
         label.set_text(label.get_text().format(
             collection=self.view.get_active_text()))
         dialog = builder.get_object("dialog")
+        assert isinstance(dialog, Gtk.Dialog)
         dialog.add_buttons(Gtk.STOCK_YES, Gtk.ResponseType.OK,
                            Gtk.STOCK_NO, Gtk.ResponseType.CANCEL)
         if dialog.run() == Gtk.ResponseType.OK:
-            self.do_remove_collection(self.view.get_active_text())
+            text = self.view.get_active_text()
+            assert isinstance(text, str)
+            self.do_remove_collection(text)
         dialog.destroy()
 
     def do_remove_collection(self, name: str) -> bool:
@@ -340,8 +361,10 @@ class Library:
         idle = self._idle_id is None
         self.view.set_sensitive(idle)
         self.add_collection.set_enabled(idle)
+        id = self.view.get_active_id()
+        assert isinstance(id, str)
         self.remove_collection.set_enabled(
-            idle and self.view.get_active_id().startswith(COLLECTION_PREFIX)
+            idle and id.startswith(COLLECTION_PREFIX)
         )
         self.refresh.set_enabled(idle)
 
@@ -370,10 +393,9 @@ class Library:
             self.view.set_active_id(FixedViews.cont.value)
         elif id.startswith(COLLECTION_PREFIX):
             collection_name = id[len(COLLECTION_PREFIX):]
-            comics = self.new_session.query(Comics).join(
-                Collection.comics).filter(
-                    Collection.name == collection_name
-                ).order_by(Comics.title, Comics.issue, Comics.path)
+            comics = self.new_session.query(Comics).join(Collection.comics) \
+                .filter(Collection.name == collection_name) \
+                .order_by(Comics.title, Comics.issue, Comics.path)
 
         if comics is not None:
             refresh_gio_model(self.list_store, list(map(ComicsIcon, comics)))
@@ -384,4 +406,6 @@ class Library:
                 path=str(self.path)).order_by(Collection.name).all()
         )]
         offset = len(FixedViews.__members__)
-        refresh_gtk_model(self.view.get_model(), new, offset)
+        model = self.view.get_model()
+        assert isinstance(model, Gtk.ListStore)
+        refresh_gtk_model(model, new, offset)

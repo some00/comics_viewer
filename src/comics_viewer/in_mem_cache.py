@@ -7,7 +7,7 @@ class InMemCache:
     def __init__(self, max_size: int):
         self._max_size = max_size
         self._cache: Dict[Hashable, bytes] = {}
-        self._lru: Dict[Hashable, int] = {}
+        self._lru: Dict[Hashable, float] = {}
 
     def get(self, key: Hashable) -> Optional[bytes]:
         if key in self._cache:
@@ -19,7 +19,7 @@ class InMemCache:
         return sum(map(len, self._cache.values()))
 
     @property
-    def max_size(self):
+    def max_size(self) -> int:
         return self._max_size
 
     @max_size.setter
@@ -43,4 +43,4 @@ class InMemCache:
             del self._cache[k]
 
     def fits(self, size: int) -> bool:
-        return self.size + size <= self.max_size
+        return self.size() + size <= self.max_size

@@ -31,11 +31,14 @@ class Thumb:
                  thumb_cache: CoverCache, library: Path):
         self._view = view
         self._library = library
-        self._thumb: Gtk.FlowBox = builder.get_object("thumb")
+        thumb = builder.get_object("thumb")
+        assert isinstance(thumb, Gtk.FlowBox)
+        self._thumb = thumb
         self._store = Gio.ListStore()
         self._thumb.bind_model(self._store, self.create_thumb)
-        self._scrolled_window: Gtk.ScrolledWindow = builder.get_object(
-            "thumb_scrolled_window")
+        scrolled_window = builder.get_object("thumb_scrolled_window")
+        assert isinstance(scrolled_window, Gtk.ScrolledWindow)
+        self._scrolled_window = scrolled_window
         self._cache = thumb_cache
         self._archive: Optional[Archive] = None
         self._to_load = []
@@ -70,17 +73,20 @@ class Thumb:
             PageInfo(path=self.archive.path, page_idx=i) for i in range(pages)
         ])
 
-    def create_thumb(self, obj: PageInfo):
+    def create_thumb(self, obj: PageInfo) -> Gtk.Box:
         builder = Gtk.Builder()
         builder.add_from_file(str(RESOURCE_BASE_DIR / "page_icon.glade"))
         self._to_load.append((obj.page_idx, builder.get_object("img")))
-        builder.get_object("label").set_label(f"{obj.page_idx + 1}")
+        label = builder.get_object("label")
+        assert isinstance(label, Gtk.Label)
+        label.set_label(f"{obj.page_idx + 1}")
         self.ensure_idle()
-        rv: Gtk.Box = builder.get_object("box")
-        rv.page_idx = obj.page_idx
-        return builder.get_object("box")
+        rv = builder.get_object("box")
+        assert isinstance(rv, Gtk.Box)
+        rv.page_idx = obj.page_idx  # pyrefly: ignore[missing-attribute]
+        return rv
 
-    def idle(self, arg):
+    def idle(self, _) -> int:
         try:
             page_idx, widget = self._to_load.pop(0)
         except IndexError:
@@ -92,8 +98,10 @@ class Thumb:
         self._idle = None
         return GLib.SOURCE_CONTINUE
 
-    def _page_activated(self, flowbox: Gtk.FlowBox, child: Gtk.Bin):
-        self._view.page_idx = child.get_child().page_idx
+    def _page_activated(self, _: Gtk.FlowBox, child: Gtk.Bin):
+        c = child.get_child()
+        assert c is not None
+        self._view.page_idx = c.page_idx  # pyrefly: ignore[missing-attribute]
 
     def scroll_to(self, page_idx):
         child = self._thumb.get_child_at_index(page_idx)
