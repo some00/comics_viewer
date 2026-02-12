@@ -137,16 +137,21 @@ class Manage:
             1 if cover_idx is None else cover_idx + 1,
             id,
         ) for (path, title, issue, cover_idx, id) in comics]
-        refresh_gtk_model(self._comics.get_model(), comics)
+        model = self._comics.get_model()
+        assert isinstance(model, Gtk.ListStore)
+        refresh_gtk_model(model, comics)
 
     def _refresh_collections(self):
         collections = [(row[0], False, row[1]) for row in self._session.query(
             Collection.name, Collection.id).join(Lib).filter_by(
                 path=str(self._library.path)).order_by(Collection.name).all()]
-        refresh_gtk_model(self._collections.get_model(), collections)
+        model = self._collections.get_model()
+        assert isinstance(model, Gtk.ListStore)
+        refresh_gtk_model(model, collections)
 
     def _comics_changed(self, selection: Gtk.TreeSelection):
         model, paths = selection.get_selected_rows()
+        assert model is not None
         self._autoincrement_action.set_enabled(len(paths) > 1)
         selected: Optional[Set[int]] = None
         for id in map(lambda p: model[p][-1], paths):
@@ -157,9 +162,12 @@ class Manage:
                 selected = None
                 break
         model = self._collections.get_model()
+        assert isinstance(model, Gtk.ListStore)
         self._contained_renderer.set_sensitive(selected is not None)
         for idx, id in enumerate([row[CollectionColumn.id] for row in model]):
-            model.set_value(model.iter_nth_child(None, idx),
+            child = model.iter_nth_child(None, idx)
+            assert child is not None
+            model.set_value(child,
                             CollectionColumn.contained,
                             selected is not None and id in selected)
         self._set_clipboad_action_states()
@@ -177,16 +185,18 @@ class Manage:
             issue = first + idx
             if issue == c.issue:
                 continue
+            assert isinstance(model, Gtk.ListStore)
             model.set_value(it, ComicsColumn.issue, issue)
             c.issue = issue
             self._session.add(c)
         self._set_session_action_states()
 
-    def _contained_changed(self, renderer, path):
+    def _contained_changed(self, _, path):
         model, paths = self._comics.get_selection().get_selected_rows()
         ids = [model[p][ComicsColumn.id] for p in paths]
         comics = self._session.query(Comics).filter(Comics.id.in_(ids)).all()
         model = self._collections.get_model()
+        assert isinstance(model, Gtk.ListStore)
         it = model.get_iter(path)
         new = not model.get_value(it, CollectionColumn.contained)
         model.set_value(it, CollectionColumn.contained, new)
@@ -199,24 +209,26 @@ class Manage:
         [self._session.add(c) for c in comics]
         self._set_session_action_states()
 
-    def _title_edited(self, renderer, path, new_text):
+    def _title_edited(self, _, path, new_text):
         model = self._comics.get_model()
+        assert isinstance(model, Gtk.ListStore)
         model.set_value(model.get_iter(path), ComicsColumn.title, new_text)
         new_text = new_text if new_text else None
         comics = self._comics_by_id(model[path][ComicsColumn.id])
         if comics.title == new_text:
             return
-        comics.title = new_text
+        comics.title = str(new_text)
         self._session.add(comics)
         self._set_session_action_states()
         self._set_clipboad_action_states()
 
-    def _issue_edited(self, renderer, path, new_text):
+    def _issue_edited(self, _, path, new_text):
         try:
             issue = int(new_text)
         except ValueError:
             return
         model = self._comics.get_model()
+        assert isinstance(model, Gtk.ListStore)
         model.set_value(model.get_iter(path), ComicsColumn.issue, issue)
         comics = self._comics_by_id(model[path][ComicsColumn.id])
         if comics.issue == issue:
@@ -225,12 +237,13 @@ class Manage:
         self._session.add(comics)
         self._set_session_action_states()
 
-    def _cover_edited(self, renderer, path, new_text):
+    def _cover_edited(self, _, path, new_text):
         try:
             cover_idx = int(new_text) - 1
         except ValueError:
             return
         model = self._comics.get_model()
+        assert isinstance(model, Gtk.ListStore)
         comics = self._comics_by_id(model[path][ComicsColumn.id])
         if 0 > cover_idx or cover_idx >= comics.pages:
             return
@@ -258,6 +271,7 @@ class Manage:
         if self._clipboard_title is None:
             return
         model, paths = self._comics.get_selection().get_selected_rows()
+        assert isinstance(model, Gtk.ListStore)
         [model.set_value(model.get_iter(p),
                          ComicsColumn.title,
                          self._clipboard_title) for p in paths]
