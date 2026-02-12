@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Generator
 import os
 from collections import namedtuple
 from pathlib import Path
@@ -114,11 +114,15 @@ def _load_texture(img: Image):
 
 
 @contextmanager
-def tile_models(archive: Archive):
+def tile_models(archive: Archive) -> Generator[list[MultiPolygon]]:
     path = archive.path.with_suffix(".cwt")
     try:
         with path.open("r") as f:
-            rv = [wkt.loads(t) for t in json.load(f)]
+            rv: list[MultiPolygon] = []
+            for t in json.load(f):
+                x = wkt.loads(t)
+                assert isinstance(x, MultiPolygon)
+                rv.append(x)
     except IOError:
         rv = [MultiPolygon()] * len(archive)
     try:
@@ -176,7 +180,7 @@ class View:
         self._affine: Optional[npt.NDArray] = None
 
         self._area.set_double_buffered(
-            int(os.environ.get("COMICS_VIEWER_DOUBLE_BUFFERED", 1)))
+            bool(int(os.environ.get("COMICS_VIEWER_DOUBLE_BUFFERED", 1))))
         self._area.connect("render", self._render)
         self._area.connect("realize", self._realize, True)
         self._area.connect("unrealize", self._unrealize, False)
@@ -229,10 +233,11 @@ class View:
 
     @property
     def fraction(self):
+        assert self.archive is not None
         return self.page_number / len(self.archive)
 
     @property
-    def archive(self) -> Archive:
+    def archive(self) -> Optional[Archive]:
         return self._archive
 
     def _affine_changed(self):
@@ -245,18 +250,21 @@ class View:
             return
         self._archive = Archive(path)
         self._thumb.archive = self._archive
+        assert self._comics is not None
         if self._comics.title and self._comics.issue:
             comics = f"{self._comics.title} #{self._comics.issue}"
         else:
+            assert self.archive is not None
             comics = self.archive.path.name
         self._status.comics.set_label(comics)
         self._window.set_title(comics)
         self._tile_stack.pop_all().close()
+        assert self._archive is not None
         self._tile_models = self._tile_stack.enter_context(
             tile_models(self._archive))
 
     @property
-    def page_idx(self) -> int:
+    def page_idx(self) -> Optional[int]:
         return self._page_idx
 
     @property
@@ -270,6 +278,7 @@ class View:
 
     @page_idx.setter
     def page_idx(self, page_idx):
+        assert self.archive is not None
         if page_idx >= len(self.archive) or page_idx < 0:
             return
         if self._page_idx is not None and self._tiles.dirty:
@@ -282,6 +291,7 @@ class View:
         self._status.progress_bar.set_fraction(self.fraction)
         self._status.pagename.set_label(self.archive.name(page_idx))
         with self._library.new_session as session, session.begin():
+            assert self._comics is not None
             comics = session.query(Comics).filter_by(
                 id=self._comics.id).one()
             comics.progress = Progress(
@@ -355,6 +365,8 @@ class View:
     @property
     def angle(self):
         if self._affine is None:
+            assert self.viewport is not None
+            assert self.img_shape is not None
             viewport_aspect = np.divide(*self.viewport)
             aspects = {
                 abs(np.divide(
@@ -411,6 +423,8 @@ class View:
                             inverse: bool, affine=None) -> npt.NDArray:
         if affine is None:
             affine = self.affine()
+        assert self.viewport is not None
+        assert self.img_shape is not None
         if inverse:
             affine = np.linalg.inv(affine)
             src, dst = self.viewport, self.img_shape
@@ -421,7 +435,8 @@ class View:
         return ((ndc - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * dst)[:2]
 
     def load(self, base: Path, comics: Comics, page_idx: int) -> bool:
-        path = base / comics.path
+        # path = base / str(comics.path)
+        path = base / str(comics.path)
         try:
             self._comics = comics
             self.archive = path
@@ -451,13 +466,14 @@ class View:
         self.img_shape = (image.width, image.height)
         self._area.queue_render()
 
-    def _render(self, area: Gtk.GLArea, context: Gdk.GLContext):
+    def _render(self, *_):
         self._ensure_page()
         OGL.glClearColor(0, 0, 0, 0)
         OGL.glClear(OGL.GL_COLOR_BUFFER_BIT)
         x, y, w, h = OGL.glGetIntegeri_v(OGL.GL_VIEWPORT, 0)
         self.viewport = np.array([w, h])
         if self._texture is not None:
+            assert self._shader is not None
             with self._shader:
                 OGL.glUniformMatrix4fv(self._transform,
                                        1, OGL.GL_FALSE,
@@ -480,14 +496,16 @@ class View:
             return compose()
         if self._affine is None:
             translate = self.m_translate
+            translate  # silence unused variable
             self._affine = compose()
         return self._affine
 
-    def _realize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
+    def _realize(self, area: Gtk.GLArea, _: Gdk.GLContext):
         area.make_current()
         OGL.glPixelStorei(OGL.GL_UNPACK_ALIGNMENT, 1)
         self._vao = self._stack.enter_context(_vertex_arrays(1))
         self._vbo = self._stack.enter_context(_vbo(VERTEX_DATA))
+        assert self._vbo is not None
         with self._vbo:
             OGL.glVertexAttribPointer(0, 3,
                                       OGL.GL_FLOAT,
@@ -510,7 +528,7 @@ class View:
         self._transform = OGL.glGetUniformLocation(self._shader, "transform")
         self._ensure_page()
 
-    def _unrealize(self, area: Gtk.GLArea, ctx: Gdk.GLContext):
+    def _unrealize(self, area: Gtk.GLArea, _: Gdk.GLContext):
         area.make_current()
         self._stack.pop_all().close()
 
@@ -536,7 +554,7 @@ class View:
         )
         self._actions.edit_with_mouse.set_enabled(enable)
 
-    def _key_press(self, widget: Gtk.GLArea, event: Gdk.EventKey):
+    def _key_press(self, _: Gtk.GLArea, event: Gdk.EventKey):
         return event.keyval in (Gdk.KEY_Right, Gdk.KEY_Left)
 
     def rotate(self, p: npt.NDArray, angle: Optional[float] = None):
