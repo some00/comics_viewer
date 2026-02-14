@@ -13,7 +13,7 @@ from functools import partial
 from .gi_helpers import Gio, Gtk, GdkPixbuf
 
 
-RESOURCE_BASE_DIR = Path(__file__).parent
+RESOURCE_BASE_DIR = Path(__file__).parent  # TODO use importlib.resources.files
 Coord = namedtuple("Coord", ["x", "y"])
 ImgSize = NewType("ImgSize", Coord)
 NewType  # silence unused import

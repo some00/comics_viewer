@@ -1,0 +1,31 @@
+[project]
+name = "comics-viewer2"
+version = "0.1.0"
+description = "A simple comics book reader"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "PyGObject@git+https://gitlab.gnome.org/GNOME/pygobject.git@da2717480488ed93f1038ea106c7a9c394059e1d",
+    "Pillow",
+    "shapely",
+    "humanize",
+    "SQLAlchemy",
+    "rarfile",
+    "PyOpenGL",
+    "numpy",
+    "transforms3d",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"comics_viewer" = ["**/*.glade", "**/*.vs", "**/*.fs"]
+
+[tool.pyrefly]
+search_path = ["stubs", "src", "."]

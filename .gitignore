@@ -4,3 +4,5 @@
 env.sh
 .coverage
 comics_viewer
+build
+**/*.egg-info

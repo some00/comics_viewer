@@ -28,7 +28,7 @@ def test_max_size_dynamic():
 
 def test_fits():
     cache = InMemCache(3)
-    cache.store("a", "\0")
+    cache.store("a", b"\0")
     assert cache.fits(2)
     assert not cache.fits(3)
 
