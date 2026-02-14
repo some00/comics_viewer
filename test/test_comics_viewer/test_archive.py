@@ -38,18 +38,21 @@ def test_len(path):
 @parametrize_pages
 @parametrize_archive
 def test_read(path, page, size, idx):
+    page  # silence unused parameter
     assert len(Archive(path).read(idx)) == size
 
 
 @parametrize_archive
 @parametrize_pages
 def test_name(path, page, size, idx):
+    size  # silence unused parameter
     assert Archive(path).name(idx) == page
 
 
 @parametrize_archive
 @parametrize_pages
 def test_size(path, page, size, idx):
+    page  # silence unused parameter
     assert Archive(path).size(idx) == size
 
 
