@@ -16,13 +16,15 @@ from .utils import get_object
 
 WidgetPos = NewType("WidgetPos", npt.NDArray)
 ImagePos = NewType("ImagePos", Point)
+Transform = Callable[[tuple[float, float] | ImagePos], WidgetPos]
+NewType  # silence import error
 EPSILON = 20  # TODO everything is in image coordinates
 RECTANGLE_CURSOR_SIZE = 20  # the first in widget coorditanes
 
 
 def html(s: str):
-    assert(len(s) in [1 + 6, 1 + 8])
-    assert(s[0] == "#")
+    assert len(s) in [1 + 6, 1 + 8]
+    assert s[0] == "#"
     s = s[1:]
     r = int(s[:2], base=16)
     g = int(s[2:4], base=16)
@@ -80,7 +82,7 @@ class WidgetPosCache:
         self._tiles: Optional[List[List[WidgetPos]]] = None
         self._representative_points: Optional[List[WidgetPos]] = None
 
-        self._rect_begin_orig: ImagePos = rect_begin
+        self._rect_begin_orig: ImagePos | None = rect_begin
         self._rect_begin: Optional[WidgetPos] = None
 
         self._points_orig: List[ImagePos] = points
@@ -118,7 +120,7 @@ class WidgetPosCache:
         return self._rect_begin
 
     @rect_begin.setter
-    def rect_begin(self, rect_begin: ImagePos):
+    def rect_begin(self, rect_begin: ImagePos | None):
         self._rect_begin_orig = rect_begin
         self._rect_begin = None
 
@@ -156,7 +158,7 @@ class Tiles:
         self._state = State.RECTANGLE
         self._restore: Optional[State] = None
         self._rect_begin: Optional[ImagePos] = None
-        self._points: List[Polygon] = []
+        self._points: List[Point] = []  # TODO this should be ImagePos
         self._tree: STRtree = STRtree([])
         self._line_tree: STRtree = STRtree([])
         self._tree_indices: Dict[int, int] = {}
@@ -183,7 +185,7 @@ class Tiles:
         return self._dirty
 
     def w2i(self, pos: WidgetPos) -> ImagePos:
-        return Point(self._view.widget_to_img(pos))
+        return ImagePos(Point(self._view.widget_to_img(pos)))
 
     def i2w(self, pos: ImagePos) -> WidgetPos:
         return self._view.img_to_widget(np.array(pos.coords).reshape(2))
@@ -191,10 +193,12 @@ class Tiles:
     # translate from image to widget
     def transform(self, p: Union[Tuple[float, float], ImagePos]) -> WidgetPos:
         if isinstance(p, tuple):
-            p = Point(*p)
-        return self.i2w(p)
+            p_image_pos = ImagePos(Point(*p))
+        else:
+            p_image_pos = p
+        return self.i2w(p_image_pos)
 
-    def _draw(self, area: Gtk.DrawingArea, cr: cairo.Context):
+    def _draw(self, _: Gtk.DrawingArea, cr: cairo.Context):
         cr.select_font_face("monospace", cairo.FontSlant.NORMAL,
                             cairo.FontWeight.BOLD)
         cr.set_font_size(30)
@@ -227,11 +231,14 @@ class Tiles:
                 cr.rotate(-self._view.angle)
                 cr.show_text(f"{idx + 1}")
 
-    def _draw_state(self, cr: cairo.Context, t: Callable):
+    def _draw_state(self, cr: cairo.Context, t: Transform):
         c_orig = self._cursor
-        c_snapped = self.snap(self._cursor) if self._cursor else None
-        c_widget = t(c_snapped if self._state != State.ERASE else c_orig
-                     ) if self._cursor else None
+        if c_orig is None:
+            c_snapped = None
+            c_widget = None
+        else:
+            c_snapped = self.snap(c_orig)
+            c_widget = t(c_snapped if self._state != State.ERASE else c_orig)
 
         # set styling current operation
         if self._state == State.ERASE:
@@ -255,26 +262,32 @@ class Tiles:
         if self._state == State.RECTANGLE and c_orig:
             if self._snap:
                 cr.set_dash([5, 2])
-            cr.rectangle(
-                *(c_widget - [np.sqrt(RECTANGLE_CURSOR_SIZE * 4)] * 2),
-                RECTANGLE_CURSOR_SIZE, RECTANGLE_CURSOR_SIZE)
+            rect_pos = c_widget - np.array([
+                np.sqrt(RECTANGLE_CURSOR_SIZE * 4)] * 2)
+            cr.rectangle(rect_pos[0],
+                         rect_pos[1],
+                         RECTANGLE_CURSOR_SIZE,
+                         RECTANGLE_CURSOR_SIZE)
             cr.stroke()
 
     def _draw_state_point(self,
                           cr: cairo.Context,
-                          c_orig: ImagePos,
-                          c_snapped: ImagePos,
-                          c_widget: WidgetPos):
+                          c_orig: ImagePos | None,
+                          c_snapped: ImagePos | None,
+                          c_widget: WidgetPos | None):
+        # TODO check if c_orig, c_snapped and c_widget can only be None
+        # together
         cursor_on_begin: bool = (
-            c_orig and self._points and
-            isclose(c_snapped, self._points[0])
+            c_orig is not None and len(self._points) != 0 and
+            c_snapped is not None and
+            bool(isclose(c_snapped, self._points[0]))
         )
         begin: Optional[WidgetPos] = None
         # pending points
         if self._points:
             begin = self._cache.points[0]
-            end = self._cache._points[-1]
-            cr.arc(*begin, 8, 0, np.pi * 2)
+            end = self._cache.points[-1]
+            cr.arc(begin[0], begin[1], 8, 0, np.pi * 2)
             if cursor_on_begin:
                 cr.fill()
             else:
@@ -283,13 +296,15 @@ class Tiles:
         for point in self._cache.points[1:]:
             cr.line_to(*point)
             cr.stroke()
-            cr.arc(*point, 8, 0, np.pi * 2)
+            cr.arc(point[0], point[1], 8, 0, np.pi * 2)
             cr.fill()
             cr.move_to(*point)
         # cursor
         if c_orig:
+            assert c_widget is not None
             if cursor_on_begin and len(self._points) > 1:
                 cr.move_to(*end)
+                assert begin is not None
                 cr.line_to(*begin)
                 cr.stroke()
             if not cursor_on_begin:
@@ -300,7 +315,7 @@ class Tiles:
                     cr.stroke()
                 if self._snap:
                     cr.set_dash([5, 2])
-                cr.arc(*c_widget, 8, 0, np.pi * 2)
+                cr.arc(c_widget[0], c_widget[1], 8, 0, np.pi * 2)
                 cr.stroke()
 
     def to_be_erased(self) -> List[int]:
@@ -312,14 +327,15 @@ class Tiles:
             return []
         selection = box(*MultiPoint([self._rect_begin, self._cursor]).bounds)
         inside = []
-        outside = None
-        for tile in self._tree.query(selection):
-            tile = self._tree.geometries[tile]
+        outside: Optional[int] = None
+        for tile_idx in self._tree.query(selection):
+            tile = self._tree.geometries[tile_idx]
+            assert isinstance(tile, Polygon)
             if selection.contains(tile):
                 inside.append(self._tree_indices[id(tile)])
                 continue
             if (
-                not inside and
+                len(inside) == 0 and
                 tile.contains(selection) and
                 (outside is None or self._tiles[outside].area > tile.area)
             ):
@@ -330,7 +346,7 @@ class Tiles:
             return [outside]
         return []
 
-    def snap(self, pos: ImagePos):
+    def snap(self, pos: ImagePos) -> ImagePos:
         if not self._snap:
             return pos
         cands = []
@@ -379,14 +395,14 @@ class Tiles:
         if self._state == State.ERASE:
             self._state = State.RECTANGLE
         self._points = []
-        self._cache.points = self._points
+        self._cache.points = list(map(ImagePos, self._points))
         self._restore = None
         self._area.queue_draw()
 
     def clip(self, pos: ImagePos) -> ImagePos:
-        return Point(np.clip(*(np.array(a, dtype=np.float64).reshape(2)
-                               for a in (pos.coords,
-                                         (0, 0), self._view.img_shape))))
+        return ImagePos(Point(np.clip(
+            *(np.array(a, dtype=np.float64).reshape(2)
+              for a in (pos.coords, (0, 0), self._view.img_shape)))))
 
     def _tiles_changed(self):
         self._dirty = True
@@ -404,7 +420,7 @@ class Tiles:
         self._rect_begin = None
         self._cache.rect_begin = None
         self._points = []
-        self._cache.points = self._points
+        self._cache.points = list(map(ImagePos, self._points))
         self._state = state
 
     def toggle_mode(self):
@@ -418,34 +434,34 @@ class Tiles:
         else:
             self._change_state(toggle(self._state))
 
-    def pen_down(self, pos: WidgetPos):
+    def pen_down(self, posw: WidgetPos):
         self._pen_down = True
-        self._cursor = self.w2i(pos)
+        self._cursor = self.w2i(posw)
         if self._state == State.RECTANGLE:
             self._rect_begin = self.clip(self._cursor)
             self._cache.rect_begin = self._rect_begin
         elif self._state == State.POINT:
-            pos = self.snap(self.clip(self.w2i(pos)))
-            if self._points and isclose(pos, self._points[0]):
+            posi = self.snap(self.clip(self.w2i(posw)))
+            if self._points and isclose(posi, self._points[0]):
                 if len(self._points) > 2:
                     self._tiles.append(Polygon(self._points))
                     self._tiles_changed()
                     self._points = []
-                    self._cache.points = self._points
+                    self._cache.points = list(map(ImagePos, self._points))
             else:
-                self._points.append(pos)
-                self._cache.points = self._points
+                self._points.append(posi)
+                self._cache.points = list(map(ImagePos, self._points))
         self.queue_draw()
 
-    def pen_up(self, pos: WidgetPos):
+    def pen_up(self, posw: WidgetPos):
         self._pen_down = False
-        pos = self.snap(self.clip(self.w2i(pos)))
+        posi = self.snap(self.clip(self.w2i(posw)))
         if self._state == State.RECTANGLE:
             if self._rect_begin is None:
                 return
-            if not isclose(self._rect_begin, pos):
+            if not isclose(self._rect_begin, posi):
                 self._tiles.append(box(*MultiPoint([self._rect_begin,
-                                                    pos]).bounds))
+                                                    posi]).bounds))
                 self._tiles_changed()
         self._cursor = None
         self._rect_begin = None
@@ -466,6 +482,7 @@ class Tiles:
                        if idx not in erase_indices]
         if erase_indices:
             self._tiles_changed()
+        assert self._restore is not None
         self._change_state(self._restore)
         self.queue_draw()
 
