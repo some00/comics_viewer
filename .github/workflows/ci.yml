@@ -1,0 +1,26 @@
+name: Build and Run CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Build container
+        run: |
+          docker build -t comics-viewer-ci -f ci/Dockerfile .
+
+      - name: Run script inside container
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            comics-viewer-ci \
+            bash ci/run.sh
