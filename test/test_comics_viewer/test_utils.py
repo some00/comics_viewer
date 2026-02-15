@@ -74,15 +74,14 @@ def decorate_model_data(func):
     ])(func)
 
 
-# @decorate_model_data
-# def test_refresh_gtk_model(model_data, target, builder):
-#     model = builder.get_object("model")
-#     assert isinstance(model, Gtk.ListStore)
-#     for x in model_data:
-#         model.append((x, 0))
-#     target = [(x, 0) for x in target]
-#     refresh_gtk_model(model, target)
-#     assert [(x[0], 0) for x in model] == target
+@decorate_model_data
+def test_refresh_gtk_model(model_data, target):
+    model = Gtk.ListStore(GObject.TYPE_INT, GObject.TYPE_INT)
+    for x in model_data:
+        model.append((x, 0))
+    target = [(x, 0) for x in target]
+    refresh_gtk_model(model, target)
+    assert [(x[0], 0) for x in model] == target
 
 
 @decorate_model_data
