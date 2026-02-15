@@ -6,3 +6,4 @@ env.sh
 comics_viewer
 build
 **/*.egg-info
+coverage.xml
