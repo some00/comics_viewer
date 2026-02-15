@@ -1,4 +1,5 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/some00/comics_viewer/.github%2Fworkflows%2Fci.yml)
+![Codecov](https://img.shields.io/codecov/c/github/some00/comics_viewer)
 
 # Comics Viewer2
 
