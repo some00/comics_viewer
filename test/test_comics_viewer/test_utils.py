@@ -4,14 +4,37 @@ from pathlib import Path
 import numpy as np
 from comics_viewer.utils import (
     image_shape, imdecode, imencode, diff_opcodes, Opcode, wrap_add_action,
-    refresh_gtk_model, refresh_gio_model, dfs_gen, image_to_pixbuf, is_in
+    refresh_gtk_model, refresh_gio_model, dfs_gen, image_to_pixbuf, is_in,
+    get_object,
 )
 from comics_viewer.gi_helpers import Gtk, Gio, GObject, GdkPixbuf
+
+GLADE = """
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+    <requires lib="gtk+" version="3.24"/>
+    <object class="GtkListStore" id="model">
+        <columns>
+            <column type="gint"/>
+            <column type="gint"/>
+        </columns>
+    </object>
+    <object class="GtkLabel" id="comics">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+    </object>
+</interface>
+"""
 
 
 @pytest.fixture
 def mock_image(mocker):
     return mocker.MagicMock(Image)
+
+
+@pytest.fixture
+def builder() -> Gtk.Builder:
+    return Gtk.Builder.new_from_string(GLADE, -1)
 
 
 def test_image_shape(mock_image):
@@ -74,20 +97,7 @@ def decorate_model_data(func):
 
 
 @decorate_model_data
-def test_refresh_gtk_model(model_data, target):
-    builder = Gtk.Builder.new_from_string(
-        """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <interface>
-            <requires lib="gtk+" version="3.24"/>
-            <object class="GtkListStore" id="model">
-                <columns>
-                    <column type="gint"/>
-                    <column type="gint"/>
-                </columns>
-            </object>
-        </interface>
-        """, -1)
+def test_refresh_gtk_model(model_data, target, builder):
     model = builder.get_object("model")
     assert isinstance(model, Gtk.ListStore)
     for x in model_data:
@@ -174,3 +184,17 @@ def test_is_in(x0, y0, x1, y1, mocker, expected):
         assert rv is None
     else:
         assert np.all(expected == rv)
+
+
+def test_get_object(builder):
+    get_object(builder, Gtk.Label, "comics")
+
+
+def test_get_object_key_error(builder):
+    with pytest.raises(KeyError):
+        get_object(builder, Gtk.Label, "foo")
+
+
+def test_get_object_type_error(builder):
+    with pytest.raises(TypeError):
+        get_object(builder, Gtk.Box, "comics")
