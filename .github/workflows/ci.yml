@@ -21,6 +21,7 @@ jobs:
         run: |
           docker run --rm \
             -u $(id -u):$(id -g) \
+            -e HOME=/tmp \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             comics-viewer-ci \
