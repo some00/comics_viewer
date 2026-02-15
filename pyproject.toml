@@ -17,6 +17,13 @@ dependencies = [
     "transforms3d",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-mock",
+    "PyGObject-stubs",
+]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
@@ -29,3 +36,6 @@ where = ["src"]
 
 [tool.pyrefly]
 search_path = ["stubs", "src", "."]
+
+[tool.uv]
+config-settings-package = { pygobject-stubs = { config = "Gtk3,Gdk3" } }
