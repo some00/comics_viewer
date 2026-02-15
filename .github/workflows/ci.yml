@@ -20,6 +20,7 @@ jobs:
       - name: Run script inside container
         run: |
           docker run --rm \
+            -u $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             comics-viewer-ci \
