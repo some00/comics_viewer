@@ -1,3 +1,5 @@
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/some00/comics_viewer/.github%2Fworkflows%2Fci.yml)
+
 # Comics Viewer2
 
 A comic book reader written in Python supporting `.cbz` and `.cbr` formats, optimized for touch screens.
