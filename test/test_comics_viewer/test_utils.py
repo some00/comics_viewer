@@ -57,8 +57,9 @@ def test_wrap_add_action(mocker):
     mock_handler = mocker.MagicMock()
     rv = add_action("name", mock_handler)
     mock_gio.SimpleAction.new.assert_called_once_with("name", None)
-    assert rv == mock_gio.SimpleAction.new.return_value
-    rv.connect.assert_called_once_with("activate", mocker.ANY)
+    rv_mock = mock_gio.SimpleAction.new.return_value
+    assert rv == rv_mock
+    rv_mock.connect.assert_called_once_with("activate", mocker.ANY)
 
 
 def decorate_model_data(func):
@@ -88,11 +89,12 @@ def test_refresh_gtk_model(model_data, target):
         </interface>
         """, -1)
     model = builder.get_object("model")
+    assert isinstance(model, Gtk.ListStore)
     for x in model_data:
         model.append((x, 0))
     target = [(x, 0) for x in target]
     refresh_gtk_model(model, target)
-    assert [tuple(x) for x in model] == target
+    assert [(x[0], 0) for x in model] == target
 
 
 @decorate_model_data
@@ -104,7 +106,11 @@ def test_refresh_gio_model(model_data, target):
     model = Gio.ListStore()
     [model.append(Elem(x)) for x in model_data]
     refresh_gio_model(model, list(map(Elem, target)))
-    assert [x.value for x in model] == target
+    model_content = []
+    for x in model:
+        assert isinstance(x, Elem)
+        model_content.append(x.value)
+    assert model_content == target
 
 
 def test_dfs_gen_empty_folder(mocker):
