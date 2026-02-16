@@ -7,7 +7,6 @@ from .utils import (
     refresh_gio_model, image_to_pixbuf, RESOURCE_BASE_DIR, get_object,
 )
 from .archive import Archive
-from .view import View
 
 
 class PageInfo(GObject.GObject):
@@ -30,7 +29,7 @@ class PageInfo(GObject.GObject):
 
 
 class Thumb:
-    def __init__(self, view: View, builder: Gtk.Builder,
+    def __init__(self, view, builder: Gtk.Builder,
                  thumb_cache: CoverCache, library: Path):
         self._view = view
         self._library = library
