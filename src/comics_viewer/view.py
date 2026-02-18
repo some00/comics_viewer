@@ -435,7 +435,6 @@ class View:
         return ((ndc - [-1.0, 1.0]) / 2.0 * [1.0, -1.0] * dst)[:2]
 
     def load(self, base: Path, comics: Comics, page_idx: int) -> bool:
-        # path = base / str(comics.path)
         path = base / str(comics.path)
         try:
             self._comics = comics
